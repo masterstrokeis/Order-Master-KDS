@@ -12,11 +12,13 @@ class StatusHeaderBand extends StatelessWidget {
     required this.createdAt,
     required this.orderType,
     required this.headerColor,
+    this.status = OrderStatus.newOrder,
   });
 
   final String displayNumber;
   final DateTime createdAt;
   final OrderType orderType;
+  final OrderStatus status;
   final Color headerColor;
 
   @override
@@ -34,7 +36,9 @@ class StatusHeaderBand extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Order #$displayNumber',
+                  status == OrderStatus.cancelled
+                      ? 'Cancelled #$displayNumber'
+                      : 'Order #$displayNumber',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppColors.onStatusHeader,
                     fontWeight: FontWeight.w700,
@@ -51,7 +55,17 @@ class StatusHeaderBand extends StatelessWidget {
               ],
             ),
           ),
-          OrderTypeHeaderIndicator(orderType: orderType),
+          if (status == OrderStatus.cancelled)
+            Text(
+              'Cancelled',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppColors.onStatusHeader,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            )
+          else
+            OrderTypeHeaderIndicator(orderType: orderType),
         ],
       ),
     );

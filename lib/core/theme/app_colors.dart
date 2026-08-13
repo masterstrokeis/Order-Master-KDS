@@ -55,6 +55,8 @@ abstract final class AppColors {
   static const Color statusNewOnDark = Color(0xFF64748B);
   static const Color statusCooking = Color(0xFFF97316);
   static const Color statusCompleted = Color(0xFF64748B);
+  /// Muted cancelled header — distinct from urgency critical red.
+  static const Color statusCancelled = Color(0xFF9CA3AF);
   static const Color urgencyWarning = Color(0xFFF59E0B);
   static const Color urgencyCritical = Color(0xFFEF4444);
   static const Color statusTabActive = Color(0xFF10B981);

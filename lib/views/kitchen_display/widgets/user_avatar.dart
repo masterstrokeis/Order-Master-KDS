@@ -10,10 +10,15 @@ class UserAvatar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final String? staff = ref.watch(
-      authControllerProvider.select((AuthState state) => state.selectedStaff),
+    final String initials = ref.watch(
+      authControllerProvider.select((AuthState state) {
+        final String? fromSession = state.session?.staff.initials;
+        if (fromSession != null && fromSession.isNotEmpty) {
+          return fromSession;
+        }
+        return _initialsFor(state.selectedStaffName);
+      }),
     );
-    final String initials = _initialsFor(staff);
 
     return Material(
       color: Colors.grey.shade300,

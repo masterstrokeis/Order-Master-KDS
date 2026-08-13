@@ -1,94 +1,418 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
+import '../models/auth_session.dart';
+import '../models/kds_api_error.dart';
 import '../models/order_item_model.dart';
 import '../models/order_model.dart';
+import '../models/orders_list_result.dart';
+import '../models/sync_result.dart';
+import '../providers/kds_backend_providers.dart';
+import '../services/kds_api_service.dart';
+import '../services/kds_http_client.dart';
 import '../services/mock_orders_service.dart';
+import 'auth_controller.dart';
 
 class OrderController extends AsyncNotifier<List<Order>> {
-  MockOrdersService get _service => const MockOrdersService();
+  final Uuid _uuid = const Uuid();
+  String? _syncCursor;
+  String? _lastActionMessage;
+
+  String? get syncCursor => _syncCursor;
+  String? get lastActionMessage => _lastActionMessage;
+
+  KdsApiService get _api => ref.read(kdsApiServiceProvider);
+
+  AuthSession? get _session => ref.read(authControllerProvider).session;
+
+  String? get _deviceId => ref.read(authControllerProvider).deviceId;
+
+  String? get _stationId => ref.read(selectedStationProvider);
 
   @override
-  Future<List<Order>> build() {
-    return _service.fetchOrders();
+  Future<List<Order>> build() async {
+    return _loadOrders();
   }
 
   Future<void> refresh() async {
     state = const AsyncLoading<List<Order>>();
-    state = await AsyncValue.guard(_service.fetchOrders);
+    state = await AsyncValue.guard(_loadOrders);
   }
 
-  void startOrder(String orderId) {
-    final List<Order>? orders = state.value;
-    if (orders == null) {
-      return;
+  Future<List<Order>> _loadOrders() async {
+    final AuthSession? session = _session;
+    final String? deviceId = _deviceId;
+    final String? stationId = _stationId;
+
+    if (session == null || deviceId == null || stationId == null) {
+      return const MockOrdersService().fetchOrders();
     }
 
-    state = AsyncData<List<Order>>(
-      orders.map((Order order) {
-        if (order.id != orderId || order.status != OrderStatus.newOrder) {
-          return order;
-        }
-        return order.copyWith(status: OrderStatus.cooking);
-      }).toList(),
+    final OrdersListResult active = await _api.listOrders(
+      session: session,
+      deviceId: deviceId,
+      stationId: stationId,
+      status: 'active',
+    );
+    final OrdersListResult completed = await _api.listOrders(
+      session: session,
+      deviceId: deviceId,
+      stationId: stationId,
+      status: 'completed',
+    );
+
+    _syncCursor = active.syncCursor;
+    final Map<String, Order> byId = <String, Order>{
+      for (final Order order in active.orders) order.id: order,
+      for (final Order order in completed.orders) order.id: order,
+    };
+    return byId.values.toList();
+  }
+
+  Future<void> startOrder(String orderId) async {
+    await _runOrderAction(
+      orderId: orderId,
+      allowedFrom: OrderStatus.newOrder,
+      call: (AuthSession session, String deviceId, Order order, String key) {
+        return _api.startOrder(
+          session: session,
+          deviceId: deviceId,
+          order: order,
+          idempotencyKey: key,
+        );
+      },
     );
   }
 
-  void completeOrder(String orderId) {
-    final List<Order>? orders = state.value;
-    if (orders == null) {
-      return;
-    }
-
-    state = AsyncData<List<Order>>(
-      orders.map((Order order) {
-        if (order.id != orderId || order.status != OrderStatus.cooking) {
-          return order;
-        }
-        return order.copyWith(status: OrderStatus.completed);
-      }).toList(),
+  Future<void> completeOrder(String orderId) async {
+    await _runOrderAction(
+      orderId: orderId,
+      allowedFrom: OrderStatus.cooking,
+      call: (AuthSession session, String deviceId, Order order, String key) {
+        return _api.completeOrder(
+          session: session,
+          deviceId: deviceId,
+          order: order,
+          idempotencyKey: key,
+        );
+      },
     );
   }
 
-  /// Restores an accidentally completed order to in-progress cooking.
-  /// Preserves item completion flags; no-op unless status is [OrderStatus.completed].
-  void rollbackOrder(String orderId) {
-    final List<Order>? orders = state.value;
-    if (orders == null) {
-      return;
-    }
-
-    state = AsyncData<List<Order>>(
-      orders.map((Order order) {
-        if (order.id != orderId || order.status != OrderStatus.completed) {
-          return order;
-        }
-        return order.copyWith(status: OrderStatus.cooking);
-      }).toList(),
+  Future<void> rollbackOrder(String orderId) async {
+    await _runOrderAction(
+      orderId: orderId,
+      allowedFrom: OrderStatus.completed,
+      call: (AuthSession session, String deviceId, Order order, String key) {
+        return _api.rollbackOrder(
+          session: session,
+          deviceId: deviceId,
+          order: order,
+          idempotencyKey: key,
+        );
+      },
     );
   }
 
-  void toggleItemCompleted(String orderId, String itemId) {
+  Future<void> toggleItemCompleted(String orderId, String itemId) async {
     final List<Order>? orders = state.value;
     if (orders == null) {
       return;
     }
 
-    state = AsyncData<List<Order>>(
-      orders.map((Order order) {
-        if (order.id != orderId || order.status != OrderStatus.cooking) {
-          return order;
-        }
+    final Order? order = _find(orders, orderId);
+    if (order == null || order.status != OrderStatus.cooking) {
+      return;
+    }
 
-        final List<OrderItem> updatedItems = order.items.map((OrderItem item) {
-          if (item.id != itemId) {
+    final OrderItem? item = _findItem(order, itemId);
+    if (item == null || item.isRemoved) {
+      return;
+    }
+
+    final AuthSession? session = _session;
+    final String? deviceId = _deviceId;
+    final String key = _uuid.v4();
+
+    if (session == null || deviceId == null) {
+      _replaceLocal(
+        order.copyWith(
+          items: order.items.map((OrderItem i) {
+            if (i.id != itemId) {
+              return i;
+            }
+            final bool next = !i.isCompleted;
+            return i.copyWith(isCompleted: next, isNew: next ? false : i.isNew);
+          }).toList(),
+        ),
+      );
+      return;
+    }
+
+    try {
+      final ItemPatchResult result = await _api.patchItemCompleted(
+        session: session,
+        deviceId: deviceId,
+        order: order,
+        itemId: itemId,
+        isCompleted: !item.isCompleted,
+        idempotencyKey: key,
+      );
+      _applyItemPatch(result);
+      _lastActionMessage = null;
+    } on KdsApiError catch (error) {
+      await _handleMutationError(error);
+    }
+  }
+
+  Future<void> acknowledgeRemovedItem(String orderId, String itemId) async {
+    final List<Order>? orders = state.value;
+    if (orders == null) {
+      return;
+    }
+
+    final Order? order = _find(orders, orderId);
+    if (order == null) {
+      return;
+    }
+    final OrderItem? item = _findItem(order, itemId);
+    if (item == null || !item.isRemoved || !item.isRemovedUnseen) {
+      return;
+    }
+
+    final AuthSession? session = _session;
+    final String? deviceId = _deviceId;
+    final String key = _uuid.v4();
+
+    if (session == null || deviceId == null) {
+      _replaceLocal(
+        order.copyWith(
+          items: order.items
+              .map(
+                (OrderItem i) => i.id == itemId
+                    ? i.copyWith(isRemovedUnseen: false)
+                    : i,
+              )
+              .toList(),
+        ),
+      );
+      return;
+    }
+
+    try {
+      final ItemPatchResult result = await _api.acknowledgeRemovedItem(
+        session: session,
+        deviceId: deviceId,
+        order: order,
+        itemId: itemId,
+        idempotencyKey: key,
+      );
+      _applyItemPatch(result);
+      _lastActionMessage = null;
+    } on KdsApiError catch (error) {
+      await _handleMutationError(error);
+    }
+  }
+
+  /// Full-state replace from WebSocket / sync (keyed by opaque order id).
+  void replaceOrder(Order order) {
+    final List<Order>? orders = state.value;
+    if (orders == null) {
+      state = AsyncData<List<Order>>(<Order>[order]);
+      return;
+    }
+    _replaceLocal(order, insertIfMissing: true);
+  }
+
+  void updateSyncCursor(String? cursor) {
+    if (cursor != null && cursor.isNotEmpty) {
+      _syncCursor = cursor;
+    }
+  }
+
+  Future<void> applySyncResult(SyncResult result) async {
+    if (result.requiresFullReload) {
+      await refresh();
+      return;
+    }
+    for (final SyncEvent event in result.events) {
+      replaceOrder(event.order);
+      updateSyncCursor(event.cursor);
+    }
+    updateSyncCursor(result.nextCursor);
+  }
+
+  Future<void> _runOrderAction({
+    required String orderId,
+    required OrderStatus allowedFrom,
+    required Future<OrderActionResult> Function(
+      AuthSession session,
+      String deviceId,
+      Order order,
+      String idempotencyKey,
+    )
+    call,
+  }) async {
+    final List<Order>? orders = state.value;
+    if (orders == null) {
+      return;
+    }
+
+    final Order? order = _find(orders, orderId);
+    if (order == null || order.status != allowedFrom) {
+      return;
+    }
+
+    final AuthSession? session = _session;
+    final String? deviceId = _deviceId;
+    final String key = _uuid.v4();
+
+    if (session == null || deviceId == null) {
+      _replaceLocal(
+        order.copyWith(
+          status: switch (allowedFrom) {
+            OrderStatus.newOrder => OrderStatus.cooking,
+            OrderStatus.cooking => OrderStatus.completed,
+            OrderStatus.completed => OrderStatus.cooking,
+            OrderStatus.cancelled => order.status,
+          },
+          version: order.version + 1,
+          updatedAt: DateTime.now().toUtc(),
+          clearCompletedAt: allowedFrom == OrderStatus.completed,
+          completedAt: allowedFrom == OrderStatus.cooking
+              ? DateTime.now().toUtc()
+              : order.completedAt,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final OrderActionResult result = await call(
+        session,
+        deviceId,
+        order,
+        key,
+      );
+      if (result.fullOrder != null) {
+        _replaceLocal(result.fullOrder!);
+      } else {
+        _replaceLocal(
+          order.copyWith(
+            status: result.status,
+            version: result.version,
+            updatedAt: result.updatedAt,
+            completedAt: result.completedAt,
+            clearCompletedAt: result.completedAt == null &&
+                result.status != OrderStatus.completed,
+          ),
+        );
+      }
+      _lastActionMessage = null;
+    } on KdsApiError catch (error) {
+      await _handleMutationError(error);
+    }
+  }
+
+  Future<void> _handleMutationError(KdsApiError error) async {
+    if (error.isVersionConflict && error.order != null) {
+      _replaceLocal(error.order!);
+      _lastActionMessage = 'Order updated elsewhere';
+      return;
+    }
+    if (error.isInvalidTransition) {
+      final Object? current = error.details['currentStatus'];
+      if (current is String) {
+        final List<Order>? orders = state.value;
+        final Order? local = orders == null
+            ? null
+            : _find(orders, error.order?.id ?? '');
+        if (error.order != null) {
+          _replaceLocal(error.order!);
+        } else if (local != null) {
+          try {
+            _replaceLocal(
+              local.copyWith(status: OrderStatus.values.byName(current)),
+            );
+          } on ArgumentError {
+            await refresh();
+          }
+        } else {
+          await refresh();
+        }
+      } else if (error.order != null) {
+        _replaceLocal(error.order!);
+      }
+      _lastActionMessage = error.message;
+      return;
+    }
+    _lastActionMessage = error.message;
+  }
+
+  void _applyItemPatch(ItemPatchResult result) {
+    if (result.fullOrder != null) {
+      _replaceLocal(result.fullOrder!);
+      return;
+    }
+    final List<Order>? orders = state.value;
+    if (orders == null) {
+      return;
+    }
+    final Order? order = _find(orders, result.orderId);
+    if (order == null) {
+      return;
+    }
+    _replaceLocal(
+      order.copyWith(
+        status: result.orderStatus,
+        version: result.orderVersion,
+        updatedAt: result.orderUpdatedAt,
+        completedAt: result.orderCompletedAt,
+        items: order.items.map((OrderItem item) {
+          if (item.id != result.itemId) {
             return item;
           }
-          return item.copyWith(isCompleted: !item.isCompleted);
-        }).toList();
-
-        return order.copyWith(items: updatedItems);
-      }).toList(),
+          return item.copyWith(
+            isCompleted: result.isCompleted,
+            isRemoved: result.isRemoved,
+            isRemovedUnseen: result.isRemovedUnseen,
+            isNew: result.isCompleted ? false : item.isNew,
+          );
+        }).toList(),
+      ),
     );
+  }
+
+  void _replaceLocal(Order order, {bool insertIfMissing = false}) {
+    final List<Order> current = state.value ?? <Order>[];
+    final int index = current.indexWhere((Order o) => o.id == order.id);
+    if (index < 0) {
+      if (insertIfMissing) {
+        state = AsyncData<List<Order>>(<Order>[...current, order]);
+      }
+      return;
+    }
+    final List<Order> next = List<Order>.of(current);
+    next[index] = order;
+    state = AsyncData<List<Order>>(next);
+  }
+
+  Order? _find(List<Order> orders, String orderId) {
+    for (final Order order in orders) {
+      if (order.id == orderId) {
+        return order;
+      }
+    }
+    return null;
+  }
+
+  OrderItem? _findItem(Order order, String itemId) {
+    for (final OrderItem item in order.items) {
+      if (item.id == itemId) {
+        return item;
+      }
+    }
+    return null;
   }
 }
 

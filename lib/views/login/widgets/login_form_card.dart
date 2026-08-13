@@ -11,11 +11,9 @@ import 'pin_indicator.dart';
 class LoginFormCard extends StatelessWidget {
   const LoginFormCard({
     super.key,
-    required this.selectedStaff,
     required this.pinLength,
     required this.isLoading,
     required this.errorMessage,
-    required this.onStaffChanged,
     required this.onDigit,
     required this.onClear,
     required this.onBackspace,
@@ -23,17 +21,9 @@ class LoginFormCard extends StatelessWidget {
     required this.onTechnicalSupport,
   });
 
-  static const List<String> staffMembers = <String>[
-    'Chef Maria',
-    'Line Cook John',
-    'Sous Chef Sarah',
-  ];
-
-  final String? selectedStaff;
   final int pinLength;
   final bool isLoading;
   final String? errorMessage;
-  final ValueChanged<String?> onStaffChanged;
   final ValueChanged<String> onDigit;
   final VoidCallback onClear;
   final VoidCallback onBackspace;
@@ -60,49 +50,14 @@ class LoginFormCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Staff Member',
+                    'Enter PIN',
+                    textAlign: TextAlign.center,
                     style: AppTextStyles.labelCaps.copyWith(
                       color: AppColors.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.unit),
-                  SizedBox(
-                    height: AppSpacing.touchTargetMin,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: selectedStaff,
-                      isExpanded: true,
-                      hint: Text(
-                        'Select Name',
-                        style: AppTextStyles.bodyLg.copyWith(
-                          color: AppColors.onSurface,
-                        ),
-                      ),
-                      icon: const Icon(
-                        Icons.expand_more,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                      style: AppTextStyles.bodyLg.copyWith(
-                        color: AppColors.onSurface,
-                      ),
-                      decoration: const InputDecoration(
-                        fillColor: AppColors.surfaceContainerHigh,
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: AppSpacing.gutter,
-                        ),
-                      ),
-                      items: staffMembers
-                          .map(
-                            (String staff) => DropdownMenuItem<String>(
-                              value: staff,
-                              child: Text(staff),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: isLoading ? null : onStaffChanged,
-                    ),
-                  ),
                   const SizedBox(height: AppSpacing.pageMargin),
-                  PinIndicator(filledCount: pinLength),
+                  Center(child: PinIndicator(filledCount: pinLength)),
                   if (errorMessage != null) ...[
                     const SizedBox(height: AppSpacing.unit),
                     Text(

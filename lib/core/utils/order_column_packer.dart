@@ -93,16 +93,21 @@ int estimateWrappedLineCount(String text, double availableWidth) {
 
 /// Height of one item row. Intentionally ignores [OrderItem.isCompleted].
 double estimateItemHeight(OrderItem item, double columnWidth) {
-  final double textWidth =
+  double textWidth =
       columnWidth -
       (KdsLayout.cardBodyHorizontalPadding * 2) -
       KdsLayout.qtyColumnWidth -
       KdsLayout.itemTextGap;
 
-  final int nameLines = estimateWrappedLineCount(
-    item.nameSnapshot,
-    textWidth,
-  );
+  if (item.isRemoved && item.isRemovedUnseen) {
+    textWidth -= KdsLayout.acknowledgeButtonWidth;
+  }
+
+  final String displayName = item.isRemoved
+      ? 'Removed · ${item.nameSnapshot}'
+      : item.nameSnapshot;
+
+  final int nameLines = estimateWrappedLineCount(displayName, textWidth);
   double height = nameLines * KdsLayout.nameLineHeight;
 
   final String? modifier = item.modifierText;

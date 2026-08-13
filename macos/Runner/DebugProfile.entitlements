@@ -2,8 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Debug/Profile: sandbox OFF so LAN API access works under macOS
+	     Local Network privacy (Sequoia+). curl works; sandboxed Flutter
+	     gets errno 65 without a Local Network grant. Release keeps sandbox. -->
 	<key>com.apple.security.app-sandbox</key>
-	<true/>
+	<false/>
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
 	<key>com.apple.security.network.client</key>

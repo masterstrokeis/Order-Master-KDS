@@ -75,6 +75,25 @@ class OrderActionFooter extends StatelessWidget {
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
         ),
+        // Cancelled: no Start/Complete (§4a). Same reserved height as other states.
+        OrderStatus.cancelled => OutlinedButton(
+          onPressed: null,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.statusCancelled,
+            disabledForegroundColor: AppColors.statusCancelled,
+            side: const BorderSide(
+              color: AppColors.statusCancelled,
+              width: 2,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadii.defaultRadius),
+            ),
+          ),
+          child: const Text(
+            'Cancelled',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
       },
     );
   }

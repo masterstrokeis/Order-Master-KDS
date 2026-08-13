@@ -7,7 +7,7 @@ import '../../../core/theme/app_spacing.dart';
 class PinIndicator extends StatelessWidget {
   const PinIndicator({super.key, required this.filledCount});
 
-  static const int pinLength = 4;
+  static const int pinLength = 3;
 
   final int filledCount;
 

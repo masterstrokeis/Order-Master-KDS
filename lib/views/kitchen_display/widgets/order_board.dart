@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/kds_layout.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/order_column_packer.dart';
+import '../../../models/order_model.dart';
 import '../../../providers/providers.dart';
 import 'board_overflow_indicator.dart';
 import 'order_card.dart';
+import 'waiting_orders_panel.dart';
 
 class OrderBoard extends ConsumerWidget {
   const OrderBoard({
@@ -20,6 +22,23 @@ class OrderBoard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final List<Order> visibleOrders = ref.watch(ordersForCurrentViewProvider);
+    if (visibleOrders.isEmpty) {
+      final KdsTab tab = ref.watch(selectedKdsTabProvider);
+      final String message = switch (tab) {
+        KdsTab.cooking => 'No cooking orders',
+        KdsTab.completed => 'No completed orders',
+      };
+      return Center(
+        child: Text(
+          message,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
     final PackedOrderBoard packed = ref.watch(
       packedOrderBoardProvider(
         BoardLayoutConstraints(
@@ -50,6 +69,15 @@ class OrderBoard extends ConsumerWidget {
             bottom: AppSpacing.gutter,
             child: BoardOverflowIndicator(
               count: packed.unplacedOrderIds.length,
+              onTap: () {
+                showWaitingOrdersPanel(
+                  context: context,
+                  constraints: BoardLayoutConstraints(
+                    boardWidth: boardWidth,
+                    boardHeight: boardHeight,
+                  ),
+                );
+              },
             ),
           ),
       ],

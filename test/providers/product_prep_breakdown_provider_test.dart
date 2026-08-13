@@ -92,9 +92,9 @@ void main() {
         .firstWhere((Order order) => order.id == target.orderId);
 
     if (targetOrder.status == OrderStatus.newOrder) {
-      controller.startOrder(targetOrder.id);
+      await controller.startOrder(targetOrder.id);
     }
-    controller.completeOrder(targetOrder.id);
+    await controller.completeOrder(targetOrder.id);
 
     final List<PrepLine> after = container.read(
       productPrepBreakdownProvider(productId),

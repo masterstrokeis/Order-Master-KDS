@@ -172,6 +172,85 @@ void main() {
     expect(board.unplacedOrderIds, isNotEmpty);
   });
 
+  test('moves second order to next column when first column is full', () {
+    Order tallOrder(String id, DateTime createdAt) {
+      return _order(
+        id: id,
+        createdAt: createdAt,
+        items: <OrderItem>[
+          _item(
+            id: '$id-1',
+            name:
+                'BLUEBERRY BUBBLE TEA-BUBBLE TEA with extra long wrapping name',
+            modifierText:
+                'Large cup, oat milk, less sugar, extra pearls, whipped cream',
+            note: 'Customer waiting at counter for pickup please prioritize',
+          ),
+          _item(
+            id: '$id-2',
+            name:
+                'CARAMEL BUBBLE TEA-BUBBLE TEA with another wrapping product name',
+            modifierText:
+                'Hot drink, almond milk, caramel drizzle, no ice please',
+            note: 'Allergy note: contains dairy and nuts handle carefully',
+          ),
+        ],
+      );
+    }
+
+    final double boardWidth =
+        KdsLayout.minimumColumnWidth * 3 + KdsLayout.cardGap * 2;
+    final double columnWidth = computeColumnWidth(boardWidth, 3);
+
+    final Order first = tallOrder('ord1', DateTime(2026, 1, 1, 8, 2));
+    final double firstHeight = estimateSegmentHeight(
+      order: first,
+      itemStartIndex: 0,
+      itemEndIndex: first.items.length,
+      columnWidth: columnWidth,
+      isPrimary: true,
+      isFinal: true,
+      showIncomingContinued: false,
+      showOutgoingContinued: false,
+    );
+
+    // Board fits one card + small slack, but not two full cards.
+    final double boardHeight = firstHeight + KdsLayout.cardGap + 20;
+
+    final PackedOrderBoard board = packOrderColumns(
+      orders: <Order>[
+        first,
+        tallOrder('ord2', DateTime(2026, 1, 1, 8, 6)),
+      ],
+      boardWidth: boardWidth,
+      boardHeight: boardHeight,
+    );
+
+    expect(board.columns[0].map((CardSegment s) => s.orderId), <String>[
+      'ord1',
+    ]);
+    expect(board.columns[1].map((CardSegment s) => s.orderId), <String>[
+      'ord2',
+    ]);
+    expect(board.unplacedOrderIds, isEmpty);
+  });
+
+  test('removed prefix increases estimated item height', () {
+    const double columnWidth = KdsLayout.minimumColumnWidth;
+    final OrderItem plain = _item(
+      id: '1',
+      name: 'CHICKEN BURGER-BURGERS',
+    );
+    final OrderItem removed = plain.copyWith(
+      isRemoved: true,
+      isRemovedUnseen: true,
+    );
+    expect(
+      estimateItemHeight(removed, columnWidth),
+      greaterThan(estimateItemHeight(plain, columnWidth)),
+    );
+  });
+
   test('column count clamps between 1 and 5', () {
     expect(computeColumnCount(100), 1);
     expect(

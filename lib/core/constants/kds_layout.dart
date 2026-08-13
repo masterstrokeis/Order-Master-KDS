@@ -6,11 +6,11 @@ abstract final class KdsLayout {
   static const int preferredTabletColumns = 2;
   static const int preferredDesktopMinColumns = 4;
 
-  /// Header band: 12px pad × 2 + order# (~24) + gap + time (~16) ≈ 64.
-  static const double headerBandHeight = 64;
+  /// Header band: measured ~68 (pad + order# + gap + time).
+  static const double headerBandHeight = 68;
 
-  /// Order-type row: 12px pad × 2 + ~20 text ≈ 48.
-  static const double orderTypeRowHeight = 48;
+  /// Order-type row: measured ~49.
+  static const double orderTypeRowHeight = 49;
 
   static const double continuedLabelHeight = 32;
 
@@ -27,8 +27,11 @@ abstract final class KdsLayout {
   static const double qtyColumnWidth = 20;
   static const double itemTextGap = 12;
 
+  /// Reserved when `Got it` is shown for unseen removals.
+  static const double acknowledgeButtonWidth = 56;
+
   /// Conservative (slightly narrow) so wrap estimates prefer more lines.
-  static const double averageCharWidth = 6.5;
+  static const double averageCharWidth = 6.0;
 
   /// Matches `AppTextStyles.bodyMd` (16px / height 1.5 → 24).
   static const double nameLineHeight = 24;
@@ -38,6 +41,6 @@ abstract final class KdsLayout {
   static const double noteLineHeight = 18;
   static const double secondaryTextTopPadding = 4;
 
-  /// Prefer early split over clipping; covers font/platform drift.
-  static const double heightSafetyAllowance = 28;
+  /// Prefer early split / next column over clipping; covers font/platform drift.
+  static const double heightSafetyAllowance = 40;
 }

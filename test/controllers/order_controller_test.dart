@@ -1,5 +1,5 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:order_master_kds/controllers/order_controller.dart';
 import 'package:order_master_kds/models/order_item_model.dart';
 import 'package:order_master_kds/models/order_model.dart';
@@ -18,7 +18,7 @@ void main() {
         .requireValue
         .firstWhere((Order o) => o.status == OrderStatus.newOrder);
 
-    controller.startOrder(order.id);
+    await controller.startOrder(order.id);
 
     final Order updated = container
         .read(orderControllerProvider)
@@ -40,7 +40,7 @@ void main() {
         .requireValue
         .firstWhere((Order o) => o.status == OrderStatus.cooking);
 
-    controller.completeOrder(order.id);
+    await controller.completeOrder(order.id);
 
     final Order updated = container
         .read(orderControllerProvider)
@@ -63,7 +63,7 @@ void main() {
         .requireValue
         .firstWhere((Order o) => o.status == OrderStatus.newOrder);
     final OrderItem newItem = newOrder.items.first;
-    controller.toggleItemCompleted(newOrder.id, newItem.id);
+    await controller.toggleItemCompleted(newOrder.id, newItem.id);
     expect(
       container
           .read(orderControllerProvider)
@@ -79,19 +79,17 @@ void main() {
         .read(orderControllerProvider)
         .requireValue
         .firstWhere((Order o) => o.status == OrderStatus.cooking);
-    final OrderItem cookingItem = cooking.items.firstWhere(
-      (OrderItem item) => !item.isCompleted,
-    );
-    controller.toggleItemCompleted(cooking.id, cookingItem.id);
+    final OrderItem cookingItem = cooking.items.first;
+    await controller.toggleItemCompleted(cooking.id, cookingItem.id);
     expect(
       container
           .read(orderControllerProvider)
           .requireValue
           .firstWhere((Order o) => o.id == cooking.id)
           .items
-          .firstWhere((OrderItem item) => item.id == cookingItem.id)
+          .firstWhere((OrderItem i) => i.id == cookingItem.id)
           .isCompleted,
-      isTrue,
+      !cookingItem.isCompleted,
     );
   });
 
@@ -103,6 +101,7 @@ void main() {
     final OrderController controller = container.read(
       orderControllerProvider.notifier,
     );
+
     final Order cooking = container
         .read(orderControllerProvider)
         .requireValue
@@ -110,7 +109,7 @@ void main() {
 
     for (final OrderItem item in cooking.items) {
       if (!item.isCompleted) {
-        controller.toggleItemCompleted(cooking.id, item.id);
+        await controller.toggleItemCompleted(cooking.id, item.id);
       }
     }
 
@@ -119,7 +118,7 @@ void main() {
         .requireValue
         .firstWhere((Order o) => o.id == cooking.id);
     expect(updated.status, OrderStatus.cooking);
-    expect(updated.items.every((OrderItem item) => item.isCompleted), isTrue);
+    expect(updated.items.every((OrderItem i) => i.isCompleted), isTrue);
   });
 
   test('rollbackOrder moves completed to cooking and preserves items', () async {
@@ -134,11 +133,11 @@ void main() {
         .read(orderControllerProvider)
         .requireValue
         .firstWhere((Order o) => o.status == OrderStatus.completed);
-    final List<bool> itemFlagsBefore = completed.items
-        .map((OrderItem item) => item.isCompleted)
+    final List<bool> beforeFlags = completed.items
+        .map((OrderItem i) => i.isCompleted)
         .toList();
 
-    controller.rollbackOrder(completed.id);
+    await controller.rollbackOrder(completed.id);
 
     final Order updated = container
         .read(orderControllerProvider)
@@ -146,8 +145,8 @@ void main() {
         .firstWhere((Order o) => o.id == completed.id);
     expect(updated.status, OrderStatus.cooking);
     expect(
-      updated.items.map((OrderItem item) => item.isCompleted).toList(),
-      itemFlagsBefore,
+      updated.items.map((OrderItem i) => i.isCompleted).toList(),
+      beforeFlags,
     );
   });
 
@@ -164,12 +163,50 @@ void main() {
         .requireValue
         .firstWhere((Order o) => o.status == OrderStatus.cooking);
 
-    controller.rollbackOrder(cooking.id);
+    await controller.rollbackOrder(cooking.id);
 
     final Order updated = container
         .read(orderControllerProvider)
         .requireValue
         .firstWhere((Order o) => o.id == cooking.id);
     expect(updated.status, OrderStatus.cooking);
+  });
+
+  test('acknowledgeRemovedItem clears isRemovedUnseen only', () async {
+    final ProviderContainer container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    await container.read(orderControllerProvider.future);
+    final OrderController controller = container.read(
+      orderControllerProvider.notifier,
+    );
+
+    final Order cooking = container
+        .read(orderControllerProvider)
+        .requireValue
+        .firstWhere((Order o) => o.status == OrderStatus.cooking);
+    final OrderItem base = cooking.items.first;
+    controller.replaceOrder(
+      cooking.copyWith(
+        items: cooking.items
+            .map(
+              (OrderItem i) => i.id == base.id
+                  ? i.copyWith(isRemoved: true, isRemovedUnseen: true)
+                  : i,
+            )
+            .toList(),
+      ),
+    );
+
+    await controller.acknowledgeRemovedItem(cooking.id, base.id);
+
+    final OrderItem updated = container
+        .read(orderControllerProvider)
+        .requireValue
+        .firstWhere((Order o) => o.id == cooking.id)
+        .items
+        .firstWhere((OrderItem i) => i.id == base.id);
+    expect(updated.isRemoved, isTrue);
+    expect(updated.isRemovedUnseen, isFalse);
   });
 }

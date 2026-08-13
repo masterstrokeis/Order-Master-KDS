@@ -10,10 +10,11 @@ import '../models/order_item_model.dart';
 import '../models/order_model.dart';
 import '../models/product_category_model.dart';
 import '../models/product_model.dart';
-import '../models/station_model.dart';
-import '../services/mock_orders_service.dart';
 import '../services/theme_preference_service.dart';
 import '../views/kitchen_display/prep_line.dart';
+import 'kds_backend_providers.dart';
+
+export 'kds_backend_providers.dart';
 
 enum KdsTab { cooking, completed }
 
@@ -38,37 +39,9 @@ class ProductQuantitySection {
   final List<ProductQuantityEntry> entries;
 }
 
-final Provider<MockOrdersService> mockOrdersServiceProvider =
-    Provider<MockOrdersService>((Ref ref) => const MockOrdersService());
-
-final Provider<List<Station>> stationsProvider = Provider<List<Station>>((
-  Ref ref,
-) {
-  return ref.watch(mockOrdersServiceProvider).fetchStations();
-});
-
-final Provider<List<Product>> productsProvider = Provider<List<Product>>((
-  Ref ref,
-) {
-  return ref.watch(mockOrdersServiceProvider).fetchProducts();
-});
-
-final Provider<List<ProductCategory>> productCategoriesProvider =
-    Provider<List<ProductCategory>>((Ref ref) {
-      return ref.watch(mockOrdersServiceProvider).fetchCategories();
-    });
-
 final StateProvider<KdsTab> selectedKdsTabProvider = StateProvider<KdsTab>(
   (Ref ref) => KdsTab.cooking,
 );
-
-final StateProvider<String?> selectedStationProvider = StateProvider<String?>((
-  Ref ref,
-) {
-  final List<Station> stations = ref.watch(stationsProvider);
-  return stations.isEmpty ? null : stations.first.id;
-});
-
 final StateProvider<ThemeMode> themeModeProvider = StateProvider<ThemeMode>(
   (Ref ref) => ThemeMode.light,
 );
@@ -125,7 +98,9 @@ final Provider<TabCounts> tabCountsProvider = Provider<TabCounts>((Ref ref) {
 });
 
 bool isActiveOrderForStation(Order order, String? stationId) {
+  // Prep sidebar totals: in-progress work only (exclude completed + cancelled).
   return order.status != OrderStatus.completed &&
+      order.status != OrderStatus.cancelled &&
       (stationId == null || order.stationId == stationId);
 }
 
@@ -296,6 +271,9 @@ int _packingFingerprint(List<Order> orders) {
               item.quantity,
               item.modifierText,
               item.note,
+              item.isNew,
+              item.isRemoved,
+              item.isRemovedUnseen,
             );
           }),
         ),

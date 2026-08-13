@@ -149,9 +149,9 @@ void main() {
           .requireValue
           .firstWhere((Order candidate) => candidate.id == orderId);
       if (order.status == OrderStatus.newOrder) {
-        controller.startOrder(orderId);
+        await controller.startOrder(orderId);
       }
-      controller.completeOrder(orderId);
+      await controller.completeOrder(orderId);
     }
     await tester.pump();
 

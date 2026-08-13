@@ -20,6 +20,10 @@ Color headerColorFor({
   required OrderUrgency urgency,
   required Brightness brightness,
 }) {
+  // Cancelled uses its own muted token — never urgency red (§4a confirmed).
+  if (status == OrderStatus.cancelled) {
+    return AppColors.statusCancelled;
+  }
   if (urgency == OrderUrgency.critical) {
     return AppColors.urgencyCritical;
   }
@@ -32,6 +36,7 @@ Color headerColorFor({
         : AppColors.statusNew,
     OrderStatus.cooking => AppColors.statusCooking,
     OrderStatus.completed => AppColors.statusCompleted,
+    OrderStatus.cancelled => AppColors.statusCancelled,
   };
 }
 
@@ -79,6 +84,7 @@ class OrderCard extends ConsumerWidget {
                 displayNumber: order.displayNumber,
                 createdAt: order.createdAt,
                 orderType: order.type,
+                status: order.status,
                 headerColor: accent,
               ),
             if (segment.isPrimary)
@@ -99,6 +105,9 @@ class OrderCard extends ConsumerWidget {
                     orderStatus: order.status,
                     onToggleItem: (String itemId) {
                       controller.toggleItemCompleted(order.id, itemId);
+                    },
+                    onAcknowledgeRemoved: (String itemId) {
+                      controller.acknowledgeRemovedItem(order.id, itemId);
                     },
                   ),
                   if (segment.showOutgoingContinued)
