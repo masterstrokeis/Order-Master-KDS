@@ -80,6 +80,31 @@ void main() {
       );
     });
 
+    test('note uses bodyMd line height and grows with long text', () {
+      final OrderItem noNote = _item(id: 'n0', name: 'Botica Ceviche');
+      final OrderItem shortNote = _item(
+        id: 'n1',
+        name: 'Botica Ceviche',
+        note: 'No onions',
+      );
+      final OrderItem longNote = _item(
+        id: 'n2',
+        name: 'Botica Ceviche',
+        note: List<String>.filled(12, 'Allergy handle carefully extra ice').join(' '),
+      );
+
+      expect(
+        estimateItemHeight(shortNote, columnWidth) -
+            estimateItemHeight(noNote, columnWidth),
+        KdsLayout.secondaryTextTopPadding + KdsLayout.noteLineHeight,
+      );
+      expect(KdsLayout.noteLineHeight, 24);
+      expect(
+        estimateItemHeight(longNote, columnWidth),
+        greaterThan(estimateItemHeight(shortNote, columnWidth)),
+      );
+    });
+
     test('item with both modifier and Note lines', () {
       final OrderItem plain = _item(
         id: '4',
@@ -131,7 +156,7 @@ void main() {
     final PackedOrderBoard board = packOrderColumns(
       orders: <Order>[_order(id: 'tall', items: items)],
       boardWidth: KdsLayout.minimumColumnWidth * 3 + KdsLayout.cardGap * 2,
-      boardHeight: 720,
+      boardHeight: 960,
     );
 
     final List<CardSegment> all = board.columns

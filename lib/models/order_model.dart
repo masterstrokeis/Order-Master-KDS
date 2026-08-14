@@ -21,6 +21,7 @@ class Order {
     this.version = 1,
     DateTime? updatedAt,
     this.completedAt,
+    this.cancelledAt,
     String? sourceOrderId,
     this.kotNumber,
     this.restaurantId = 'rest_001',
@@ -74,6 +75,8 @@ class Order {
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? completedAt;
+  /// Local first-seen cancel time. Not parsed from JSON.
+  final DateTime? cancelledAt;
   final OrderType type;
   final OrderStatus status;
   final int version;
@@ -94,6 +97,7 @@ class Order {
     DateTime? updatedAt,
     DateTime? completedAt,
     bool clearCompletedAt = false,
+    DateTime? cancelledAt,
     OrderType? type,
     OrderStatus? status,
     int? version,
@@ -113,6 +117,7 @@ class Order {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
+      cancelledAt: cancelledAt ?? this.cancelledAt,
       type: type ?? this.type,
       status: status ?? this.status,
       version: version ?? this.version,

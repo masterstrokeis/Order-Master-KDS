@@ -59,6 +59,8 @@ abstract final class AppColors {
   static const Color statusCancelled = Color(0xFF9CA3AF);
   static const Color urgencyWarning = Color(0xFFF59E0B);
   static const Color urgencyCritical = Color(0xFFEF4444);
+  /// Blink border for an existing ticket after a spoken update.
+  static const Color orderUpdatePulse = Color(0xFFFBBF24);
   static const Color statusTabActive = Color(0xFF10B981);
   static const Color onStatusHeader = Color(0xFFFFFFFF);
 

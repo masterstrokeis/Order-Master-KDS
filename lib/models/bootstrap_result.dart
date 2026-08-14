@@ -15,7 +15,10 @@ class BootstrapResult {
     required this.websocket,
   });
 
-  factory BootstrapResult.fromJson(Map<String, dynamic> json) {
+  factory BootstrapResult.fromJson(
+    Map<String, dynamic> json, {
+    String? httpBaseUrl,
+  }) {
     return BootstrapResult(
       serverTime: DateTime.parse(json['serverTime'] as String),
       restaurant: Restaurant.fromJson(
@@ -35,6 +38,7 @@ class BootstrapResult {
           .toList(),
       websocket: WebsocketConfig.fromJson(
         json['websocket'] as Map<String, dynamic>,
+        httpBaseUrl: httpBaseUrl,
       ),
     );
   }

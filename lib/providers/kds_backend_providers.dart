@@ -10,11 +10,13 @@ import '../models/station_model.dart';
 import '../services/kds_api_service.dart';
 import '../services/kds_http_client.dart';
 import '../services/mock_orders_service.dart';
+import 'server_config_providers.dart';
 
 final Provider<KdsHttpClient> kdsHttpClientProvider = Provider<KdsHttpClient>((
   Ref ref,
 ) {
   return KdsHttpClient(
+    baseUrl: ref.watch(kdsBaseUrlProvider),
     onUnauthorized: () {
       return ref.read(authControllerProvider.notifier).refreshSession();
     },

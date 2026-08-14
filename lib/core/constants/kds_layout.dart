@@ -38,7 +38,8 @@ abstract final class KdsLayout {
 
   /// 12px secondary text ≈ 16–18; pad top 4 included below.
   static const double modifierLineHeight = 18;
-  static const double noteLineHeight = 18;
+  /// Matches `AppTextStyles.bodyMd` used for cooking-card notes.
+  static const double noteLineHeight = 24;
   static const double secondaryTextTopPadding = 4;
 
   /// Prefer early split / next column over clipping; covers font/platform drift.

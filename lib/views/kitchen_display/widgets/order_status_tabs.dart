@@ -43,6 +43,17 @@ class OrderStatusTabs extends ConsumerWidget {
                   KdsTab.completed;
             },
           ),
+          const SizedBox(width: 4),
+          _TabButton(
+            label: 'Cancelled (${counts.cancelled})',
+            selected: selected == KdsTab.cancelled,
+            selectedColor: AppColors.statusCancelled,
+            selectedForeground: AppColors.onStatusHeader,
+            onTap: () {
+              ref.read(selectedKdsTabProvider.notifier).state =
+                  KdsTab.cancelled;
+            },
+          ),
         ],
       ),
     );

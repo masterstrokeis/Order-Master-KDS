@@ -28,6 +28,8 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan a QR code to configure the kitchen server address.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>KDS needs access to devices on your local network to reach the kitchen API server.</string>
 	<key>NSBonjourServices</key>

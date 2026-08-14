@@ -28,6 +28,7 @@ class OrderBoard extends ConsumerWidget {
       final String message = switch (tab) {
         KdsTab.cooking => 'No cooking orders',
         KdsTab.completed => 'No completed orders',
+        KdsTab.cancelled => 'No cancelled orders',
       };
       return Center(
         child: Text(

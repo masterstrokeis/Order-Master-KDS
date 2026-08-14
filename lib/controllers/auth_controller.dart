@@ -2,8 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/auth_session.dart';
 import '../models/kds_api_error.dart';
+import '../providers/server_config_providers.dart';
 import '../services/auth_service.dart';
 import '../services/device_identity_service.dart';
+import '../services/kds_http_client.dart';
 import '../services/session_store.dart';
 import '../views/login/widgets/pin_indicator.dart';
 
@@ -38,9 +40,51 @@ class AuthController extends Notifier<AuthState> {
       ref.read(deviceIdentityServiceProvider);
 
   Future<String?>? _inFlightRefresh;
+  bool _restoreStarted = false;
 
   @override
   AuthState build() => const AuthState();
+
+  /// Load a persisted session after process start. No-op if already
+  /// authenticating or authenticated.
+  Future<void> restoreSession() async {
+    if (_restoreStarted ||
+        state.status == AuthStatus.authenticated ||
+        state.status == AuthStatus.loading) {
+      return;
+    }
+    _restoreStarted = true;
+
+    state = AuthState(
+      status: AuthStatus.loading,
+      deviceId: state.deviceId,
+      session: state.session,
+    );
+
+    final AuthSession? session = await _authService.loadPersistedSession();
+    final String deviceId = await _deviceIdentity.getOrCreateDeviceId();
+
+    if (session == null) {
+      state = AuthState(deviceId: deviceId);
+      return;
+    }
+
+    if (!session.isAccessTokenExpired) {
+      state = AuthState(
+        status: AuthStatus.authenticated,
+        deviceId: deviceId,
+        session: session,
+      );
+      return;
+    }
+
+    state = AuthState(
+      status: AuthStatus.loading,
+      deviceId: deviceId,
+      session: session,
+    );
+    await _refreshSessionBody();
+  }
 
   void appendDigit(String digit) {
     if (state.status == AuthStatus.loading ||
@@ -191,6 +235,7 @@ class AuthController extends Notifier<AuthState> {
 
   Future<void> logout() async {
     await _authService.logout();
+    _restoreStarted = false;
     state = const AuthState();
   }
 
@@ -216,7 +261,10 @@ final Provider<DeviceIdentityService> deviceIdentityServiceProvider =
 final Provider<AuthService> authServiceProvider = Provider<AuthService>((
   Ref ref,
 ) {
-  return AuthService(sessionStore: ref.watch(sessionStoreProvider));
+  return AuthService(
+    sessionStore: ref.watch(sessionStoreProvider),
+    httpClient: KdsHttpClient(baseUrl: ref.watch(kdsBaseUrlProvider)),
+  );
 });
 
 final NotifierProvider<AuthController, AuthState> authControllerProvider =

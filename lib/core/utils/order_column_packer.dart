@@ -88,7 +88,7 @@ int estimateWrappedLineCount(String text, double availableWidth) {
   }
   final double charsPerLine = (availableWidth / KdsLayout.averageCharWidth)
       .clamp(1, 1000);
-  return (text.length / charsPerLine).ceil().clamp(1, 20);
+  return (text.length / charsPerLine).ceil().clamp(1, 40);
 }
 
 /// Height of one item row. Intentionally ignores [OrderItem.isCompleted].

@@ -13,6 +13,7 @@ class DarkModeToggle extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ThemeMode mode = ref.watch(themeModeProvider);
     final bool isDark = mode == ThemeMode.dark;
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -20,6 +21,8 @@ class DarkModeToggle extends ConsumerWidget {
         Switch.adaptive(
           value: isDark,
           activeThumbColor: AppColors.statusTabActive,
+          inactiveThumbColor: colorScheme.onSurfaceVariant,
+          inactiveTrackColor: colorScheme.outline,
           onChanged: (bool value) async {
             final ThemeMode next = value ? ThemeMode.dark : ThemeMode.light;
             ref.read(themeModeProvider.notifier).state = next;
@@ -33,7 +36,7 @@ class DarkModeToggle extends ConsumerWidget {
         Text(
           'Dark Mode',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Colors.white70,
+            color: colorScheme.onSurface,
             fontWeight: FontWeight.w500,
             fontSize: 13,
           ),

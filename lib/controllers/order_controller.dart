@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../core/utils/cancelled_cooking_visibility.dart';
+import '../core/utils/order_event_diff.dart';
 import '../models/auth_session.dart';
 import '../models/kds_api_error.dart';
+import '../models/kds_order_event.dart';
 import '../models/order_item_model.dart';
 import '../models/order_model.dart';
 import '../models/orders_list_result.dart';
@@ -45,7 +50,8 @@ class OrderController extends AsyncNotifier<List<Order>> {
     final String? stationId = _stationId;
 
     if (session == null || deviceId == null || stationId == null) {
-      return const MockOrdersService().fetchOrders();
+      final List<Order> mock = await const MockOrdersService().fetchOrders();
+      return mock.map(stampCancelledAt).toList();
     }
 
     final OrdersListResult active = await _api.listOrders(
@@ -66,7 +72,9 @@ class OrderController extends AsyncNotifier<List<Order>> {
       for (final Order order in active.orders) order.id: order,
       for (final Order order in completed.orders) order.id: order,
     };
-    return byId.values.toList();
+    return byId.values
+        .map((Order order) => stampCancelledAt(order))
+        .toList();
   }
 
   Future<void> startOrder(String orderId) async {
@@ -216,12 +224,7 @@ class OrderController extends AsyncNotifier<List<Order>> {
 
   /// Full-state replace from WebSocket / sync (keyed by opaque order id).
   void replaceOrder(Order order) {
-    final List<Order>? orders = state.value;
-    if (orders == null) {
-      state = AsyncData<List<Order>>(<Order>[order]);
-      return;
-    }
-    _replaceLocal(order, insertIfMissing: true);
+    _replaceLocal(order, insertIfMissing: true, emitEvents: true);
   }
 
   void updateSyncCursor(String? cursor) {
@@ -316,7 +319,7 @@ class OrderController extends AsyncNotifier<List<Order>> {
 
   Future<void> _handleMutationError(KdsApiError error) async {
     if (error.isVersionConflict && error.order != null) {
-      _replaceLocal(error.order!);
+      _replaceLocal(error.order!, emitEvents: true);
       _lastActionMessage = 'Order updated elsewhere';
       return;
     }
@@ -328,11 +331,12 @@ class OrderController extends AsyncNotifier<List<Order>> {
             ? null
             : _find(orders, error.order?.id ?? '');
         if (error.order != null) {
-          _replaceLocal(error.order!);
+          _replaceLocal(error.order!, emitEvents: true);
         } else if (local != null) {
           try {
             _replaceLocal(
               local.copyWith(status: OrderStatus.values.byName(current)),
+              emitEvents: true,
             );
           } on ArgumentError {
             await refresh();
@@ -341,7 +345,7 @@ class OrderController extends AsyncNotifier<List<Order>> {
           await refresh();
         }
       } else if (error.order != null) {
-        _replaceLocal(error.order!);
+        _replaceLocal(error.order!, emitEvents: true);
       }
       _lastActionMessage = error.message;
       return;
@@ -383,18 +387,40 @@ class OrderController extends AsyncNotifier<List<Order>> {
     );
   }
 
-  void _replaceLocal(Order order, {bool insertIfMissing = false}) {
+  void _replaceLocal(
+    Order order, {
+    bool insertIfMissing = false,
+    bool emitEvents = false,
+  }) {
     final List<Order> current = state.value ?? <Order>[];
     final int index = current.indexWhere((Order o) => o.id == order.id);
     if (index < 0) {
       if (insertIfMissing) {
-        state = AsyncData<List<Order>>(<Order>[...current, order]);
+        final Order stamped = stampCancelledAt(order);
+        if (emitEvents) {
+          _emitOrderEvents(null, stamped);
+        }
+        state = AsyncData<List<Order>>(<Order>[...current, stamped]);
       }
       return;
     }
+    final Order previous = current[index];
+    final Order stamped = stampCancelledAt(order, previous: previous);
+    if (emitEvents) {
+      _emitOrderEvents(previous, stamped);
+    }
     final List<Order> next = List<Order>.of(current);
-    next[index] = order;
+    next[index] = stamped;
     state = AsyncData<List<Order>>(next);
+  }
+
+  void _emitOrderEvents(Order? previous, Order next) {
+    final StreamController<KdsOrderEvent> controller = ref.read(
+      orderEventsControllerProvider,
+    );
+    for (final KdsOrderEvent event in diffOrderEvents(previous, next)) {
+      controller.add(event);
+    }
   }
 
   Order? _find(List<Order> orders, String orderId) {
@@ -419,3 +445,19 @@ class OrderController extends AsyncNotifier<List<Order>> {
 final AsyncNotifierProvider<OrderController, List<Order>>
 orderControllerProvider =
     AsyncNotifierProvider<OrderController, List<Order>>(OrderController.new);
+
+/// Broadcast bus for chef-facing order diffs. Lives next to
+/// [orderControllerProvider] so the notifier can emit without importing
+/// providers.dart (same circular-import pattern as urgency settings).
+final Provider<StreamController<KdsOrderEvent>> orderEventsControllerProvider =
+    Provider<StreamController<KdsOrderEvent>>((Ref ref) {
+      final StreamController<KdsOrderEvent> controller =
+          StreamController<KdsOrderEvent>.broadcast(sync: true);
+      ref.onDispose(controller.close);
+      return controller;
+    });
+
+final StreamProvider<KdsOrderEvent> orderEventsProvider =
+    StreamProvider<KdsOrderEvent>((Ref ref) {
+      return ref.watch(orderEventsControllerProvider).stream;
+    });

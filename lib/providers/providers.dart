@@ -3,26 +3,54 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../controllers/order_controller.dart';
+import '../controllers/urgency_settings_controller.dart';
 import '../core/constants/kds_timing.dart';
+import '../core/utils/cancelled_cooking_visibility.dart';
 import '../core/utils/order_column_packer.dart';
 import '../core/utils/order_urgency.dart';
 import '../models/order_item_model.dart';
 import '../models/order_model.dart';
 import '../models/product_category_model.dart';
 import '../models/product_model.dart';
+import '../models/urgency_settings.dart';
+import '../services/cancelled_display_preference_service.dart';
+import '../services/product_quantity_list_preference_service.dart';
 import '../services/theme_preference_service.dart';
 import '../views/kitchen_display/prep_line.dart';
 import 'kds_backend_providers.dart';
 
+export '../controllers/order_controller.dart'
+    show
+        orderControllerProvider,
+        orderEventsControllerProvider,
+        orderEventsProvider;
+export '../controllers/urgency_settings_controller.dart'
+    show urgencySettingsProvider, urgencySettingsServiceProvider;
+export '../controllers/voice_announcement_controller.dart'
+    show
+        announcementPreferenceServiceProvider,
+        announcementsEnabledProvider,
+        kdsTtsServiceProvider,
+        orderUpdatePulsePreferenceServiceProvider,
+        orderUpdatePulseSecondsProvider,
+        orderUpdatePulseUntilProvider,
+        voiceAnnouncementProvider;
+export '../services/cancelled_display_preference_service.dart';
 export 'kds_backend_providers.dart';
+export 'server_config_providers.dart';
 
-enum KdsTab { cooking, completed }
+enum KdsTab { cooking, completed, cancelled }
 
 class TabCounts {
-  const TabCounts({required this.cooking, required this.completed});
+  const TabCounts({
+    required this.cooking,
+    required this.completed,
+    required this.cancelled,
+  });
 
   final int cooking;
   final int completed;
+  final int cancelled;
 }
 
 class ProductQuantityEntry {
@@ -46,6 +74,26 @@ final StateProvider<ThemeMode> themeModeProvider = StateProvider<ThemeMode>(
   (Ref ref) => ThemeMode.light,
 );
 
+final Provider<ProductQuantityListPreferenceService>
+productQuantityListPreferenceServiceProvider =
+    Provider<ProductQuantityListPreferenceService>(
+      (Ref ref) => ProductQuantityListPreferenceService(),
+    );
+
+/// Product & quantity sidebar on the kitchen display. Default visible.
+final StateProvider<bool> productQuantityListVisibleProvider =
+    StateProvider<bool>((Ref ref) => true);
+
+final Provider<CancelledDisplayPreferenceService>
+cancelledDisplayPreferenceServiceProvider =
+    Provider<CancelledDisplayPreferenceService>(
+      (Ref ref) => CancelledDisplayPreferenceService(),
+    );
+
+final StateProvider<int> cancelledDisplaySecondsProvider = StateProvider<int>(
+  (Ref ref) => KdsTiming.cancelledCookingDisplayDuration.inSeconds,
+);
+
 final Provider<ThemePreferenceService> themePreferenceServiceProvider =
     Provider<ThemePreferenceService>((Ref ref) => ThemePreferenceService());
 
@@ -65,14 +113,23 @@ final Provider<List<Order>> ordersForCurrentViewProvider =
       final String? stationId = ref.watch(selectedStationProvider);
       final List<Order> orders =
           ref.watch(orderControllerProvider).value ?? <Order>[];
+      final DateTime now = ref.watch(kdsClockProvider).value ?? DateTime.now();
+      final Duration cancelledDisplay = Duration(
+        seconds: ref.watch(cancelledDisplaySecondsProvider),
+      );
 
       return orders.where((Order order) {
         if (stationId != null && order.stationId != stationId) {
           return false;
         }
         return switch (tab) {
-          KdsTab.cooking => order.status != OrderStatus.completed,
+          KdsTab.cooking => isVisibleOnCookingTab(
+            order: order,
+            now: now,
+            cancelledDisplayDuration: cancelledDisplay,
+          ),
           KdsTab.completed => order.status == OrderStatus.completed,
+          KdsTab.cancelled => order.status == OrderStatus.cancelled,
         };
       }).toList();
     });
@@ -81,20 +138,37 @@ final Provider<TabCounts> tabCountsProvider = Provider<TabCounts>((Ref ref) {
   final String? stationId = ref.watch(selectedStationProvider);
   final List<Order> orders =
       ref.watch(orderControllerProvider).value ?? <Order>[];
+  final DateTime now = ref.watch(kdsClockProvider).value ?? DateTime.now();
+  final Duration cancelledDisplay = Duration(
+    seconds: ref.watch(cancelledDisplaySecondsProvider),
+  );
 
   int cooking = 0;
   int completed = 0;
+  int cancelled = 0;
   for (final Order order in orders) {
     if (stationId != null && order.stationId != stationId) {
       continue;
     }
     if (order.status == OrderStatus.completed) {
       completed++;
-    } else {
+    }
+    if (order.status == OrderStatus.cancelled) {
+      cancelled++;
+    }
+    if (isVisibleOnCookingTab(
+      order: order,
+      now: now,
+      cancelledDisplayDuration: cancelledDisplay,
+    )) {
       cooking++;
     }
   }
-  return TabCounts(cooking: cooking, completed: completed);
+  return TabCounts(
+    cooking: cooking,
+    completed: completed,
+    cancelled: cancelled,
+  );
 });
 
 bool isActiveOrderForStation(Order order, String? stationId) {
@@ -232,7 +306,22 @@ final orderUrgencyProvider = Provider.family<OrderUrgency, String>((
     return OrderUrgency.normal;
   }
   final DateTime now = ref.watch(kdsClockProvider).value ?? DateTime.now();
-  return urgencyForOrder(order, now);
+  final int warningMinutes = ref.watch(
+    urgencySettingsProvider.select(
+      (UrgencySettings settings) => settings.warningMinutes,
+    ),
+  );
+  final int criticalMinutes = ref.watch(
+    urgencySettingsProvider.select(
+      (UrgencySettings settings) => settings.criticalMinutes,
+    ),
+  );
+  return urgencyForOrder(
+    order,
+    now,
+    warningThreshold: Duration(minutes: warningMinutes),
+    criticalThreshold: Duration(minutes: criticalMinutes),
+  );
 });
 
 final packedOrderBoardProvider =

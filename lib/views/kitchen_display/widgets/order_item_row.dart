@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_text_styles.dart';
 import '../../../models/order_item_model.dart';
 import '../../../models/order_model.dart';
 
@@ -134,32 +135,15 @@ class OrderItemRow extends StatelessWidget {
                   child: Text.rich(
                     TextSpan(
                       style: withStrike(
-                        base?.copyWith(fontSize: 12),
-                        secondaryColor,
+                        AppTextStyles.bodyMd.copyWith(
+                          color: nameColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        nameColor,
                       ),
                       children: [
-                        TextSpan(
-                          text: 'Note: ',
-                          style: withStrike(
-                            base?.copyWith(
-                              color: nameColor,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                            nameColor,
-                          ),
-                        ),
-                        TextSpan(
-                          text: item.note,
-                          style: withStrike(
-                            base?.copyWith(
-                              color: secondaryColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w400,
-                            ),
-                            secondaryColor,
-                          ),
-                        ),
+                        const TextSpan(text: 'Note: '),
+                        TextSpan(text: item.note),
                       ],
                     ),
                   ),

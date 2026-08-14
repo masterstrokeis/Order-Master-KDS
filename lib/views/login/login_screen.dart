@@ -8,11 +8,24 @@ import '../../providers/kds_backend_providers.dart';
 import '../kitchen_display/kitchen_display_screen.dart';
 import 'widgets/login_form_card.dart';
 
-class LoginScreen extends ConsumerWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends ConsumerState<LoginScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(authControllerProvider.notifier).restoreSession();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     ref.listen<AuthState>(authControllerProvider, (
       AuthState? previous,
       AuthState next,

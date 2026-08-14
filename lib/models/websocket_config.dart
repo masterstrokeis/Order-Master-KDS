@@ -8,10 +8,13 @@ class WebsocketConfig {
     this.reconnectMaxDelayMs = 10000,
   });
 
-  factory WebsocketConfig.fromJson(Map<String, dynamic> json) {
-    // Heartbeat / reconnect come from bootstrap; URL always from KdsConfig.
+  factory WebsocketConfig.fromJson(
+    Map<String, dynamic> json, {
+    String? httpBaseUrl,
+  }) {
+    // Heartbeat / reconnect come from bootstrap; URL from the active HTTP base.
     return WebsocketConfig(
-      url: urlFromKdsConfig(),
+      url: urlFromHttpBase(httpBaseUrl ?? KdsConfig.baseUrl),
       heartbeatIntervalSeconds: (json['heartbeatIntervalSeconds'] as num)
           .toInt(),
       reconnectMinDelayMs:
@@ -26,10 +29,10 @@ class WebsocketConfig {
   final int reconnectMinDelayMs;
   final int reconnectMaxDelayMs;
 
-  /// WebSocket endpoint derived from [KdsConfig.baseUrl] + `/api/v1/kds/ws`.
+  /// WebSocket endpoint derived from the HTTP base URL + `/api/v1/kds/ws`.
   /// Bootstrap `websocket.url` is intentionally unused.
-  static String urlFromKdsConfig() {
-    final Uri httpBase = Uri.parse(KdsConfig.baseUrl);
+  static String urlFromHttpBase(String httpBaseUrl) {
+    final Uri httpBase = Uri.parse(httpBaseUrl);
     final String scheme = httpBase.scheme == 'https' ? 'wss' : 'ws';
     final int? port = httpBase.hasPort ? httpBase.port : null;
 
@@ -40,4 +43,6 @@ class WebsocketConfig {
       path: '${KdsConfig.apiPrefix}/ws',
     ).toString();
   }
+
+  static String urlFromKdsConfig() => urlFromHttpBase(KdsConfig.baseUrl);
 }

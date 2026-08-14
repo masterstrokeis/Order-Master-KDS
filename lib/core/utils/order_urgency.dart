@@ -1,12 +1,16 @@
-import '../constants/kds_timing.dart';
 import '../../models/order_model.dart';
 
-OrderUrgency urgencyForOrder(Order order, DateTime now) {
+OrderUrgency urgencyForOrder(
+  Order order,
+  DateTime now, {
+  required Duration warningThreshold,
+  required Duration criticalThreshold,
+}) {
   final Duration elapsed = now.difference(order.createdAt);
-  if (elapsed >= KdsTiming.criticalThreshold) {
+  if (elapsed >= criticalThreshold) {
     return OrderUrgency.critical;
   }
-  if (elapsed >= KdsTiming.warningThreshold) {
+  if (elapsed >= warningThreshold) {
     return OrderUrgency.warning;
   }
   return OrderUrgency.normal;

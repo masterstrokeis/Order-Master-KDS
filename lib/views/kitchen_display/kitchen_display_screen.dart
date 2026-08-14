@@ -7,8 +7,9 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/utils/kds_api_logger.dart';
 import '../../models/auth_session.dart';
 import '../../models/bootstrap_result.dart';
+import '../../models/kds_api_error.dart';
 import '../../models/order_model.dart';
-import '../../providers/kds_backend_providers.dart';
+import '../../providers/providers.dart';
 import '../../services/kds_api_service.dart';
 import '../../services/kds_websocket_service.dart';
 import '../login/login_screen.dart';
@@ -162,34 +163,43 @@ class _KitchenDisplayScreenState extends ConsumerState<KitchenDisplayScreen> {
             child: ordersAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (Object error, StackTrace stackTrace) => Center(
-                child: Text('Failed to load orders: $error'),
+                child: Text(
+                  error is KdsApiError
+                      ? error.message
+                      : error.toString(),
+                ),
               ),
-              data: (_) => Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const ProductSidebar(),
-                  Expanded(
-                    child: ColoredBox(
-                      color: Theme.of(context).scaffoldBackgroundColor,
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.pageMargin),
-                        child: LayoutBuilder(
-                          builder:
-                              (
-                                BuildContext context,
-                                BoxConstraints constraints,
-                              ) {
-                                return OrderBoard(
-                                  boardWidth: constraints.maxWidth,
-                                  boardHeight: constraints.maxHeight,
-                                );
-                              },
+              data: (_) {
+                final bool showProductQuantityList = ref.watch(
+                  productQuantityListVisibleProvider,
+                );
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (showProductQuantityList) const ProductSidebar(),
+                    Expanded(
+                      child: ColoredBox(
+                        color: Theme.of(context).scaffoldBackgroundColor,
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.pageMargin),
+                          child: LayoutBuilder(
+                            builder:
+                                (
+                                  BuildContext context,
+                                  BoxConstraints constraints,
+                                ) {
+                                  return OrderBoard(
+                                    boardWidth: constraints.maxWidth,
+                                    boardHeight: constraints.maxHeight,
+                                  );
+                                },
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                );
+              },
             ),
           ),
         ],

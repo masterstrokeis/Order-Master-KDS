@@ -94,6 +94,7 @@ class KdsApiService {
           'outletId': session.outlet.id,
         },
       ),
+      httpBaseUrl: _http.baseUrl,
     );
   }
 
@@ -411,7 +412,7 @@ class KdsApiService {
           )
           .toList(),
       websocket: WebsocketConfig(
-        url: WebsocketConfig.urlFromKdsConfig(),
+        url: WebsocketConfig.urlFromHttpBase(_http.baseUrl),
         heartbeatIntervalSeconds: 20,
       ),
     );

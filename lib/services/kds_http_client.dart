@@ -27,6 +27,8 @@ class KdsHttpClient {
   final Uuid _uuid;
   final String _baseUrl;
 
+  String get baseUrl => _baseUrl;
+
   /// Optional silent refresh hook for authenticated 401s.
   final KdsUnauthorizedHandler? onUnauthorized;
 
