@@ -54,12 +54,10 @@ class PackedOrderBoard {
   const PackedOrderBoard({
     required this.columns,
     required this.columnWidth,
-    required this.unplacedOrderIds,
   });
 
   final List<List<CardSegment>> columns;
   final double columnWidth;
-  final List<String> unplacedOrderIds;
 }
 
 int computeColumnCount(double boardWidth) {
@@ -137,7 +135,9 @@ double estimateSegmentChrome({
   required bool showOutgoingContinued,
 }) {
   double height =
-      KdsLayout.cardBorderWidth * 2 + KdsLayout.cardBodyVerticalPadding;
+      KdsLayout.cardBorderWidth * 2 +
+      KdsLayout.cardPulseBorderWidth * 2 +
+      KdsLayout.cardBodyVerticalPadding;
   if (isPrimary) {
     height += KdsLayout.headerBandHeight + KdsLayout.orderTypeRowHeight;
   }
@@ -185,40 +185,36 @@ PackedOrderBoard packOrderColumns({
   final List<Order> sorted = List<Order>.of(orders)
     ..sort((Order a, Order b) => a.createdAt.compareTo(b.createdAt));
 
-  final int columnCount = computeColumnCount(boardWidth);
-  final double columnWidth = computeColumnWidth(boardWidth, columnCount);
-  final List<List<CardSegment>> columns = List<List<CardSegment>>.generate(
-    columnCount,
-    (_) => <CardSegment>[],
+  final int viewportColumnCount = computeColumnCount(boardWidth);
+  final double columnWidth = computeColumnWidth(
+    boardWidth,
+    viewportColumnCount,
   );
-  final List<double> usedHeights = List<double>.filled(columnCount, 0);
-  final List<String> unplacedOrderIds = <String>[];
+  final List<List<CardSegment>> columns = List<List<CardSegment>>.generate(
+    viewportColumnCount,
+    (_) => <CardSegment>[],
+    growable: true,
+  );
+  final List<double> usedHeights = List<double>.filled(
+    viewportColumnCount,
+    0,
+    growable: true,
+  );
 
   int columnIndex = 0;
 
   for (final Order order in sorted) {
-    if (columnIndex >= columnCount) {
-      unplacedOrderIds.add(order.id);
-      continue;
-    }
-
     int itemCursor = 0;
     int segmentIndex = 0;
 
     while (itemCursor < order.items.length) {
-      if (columnIndex >= columnCount) {
-        unplacedOrderIds.add(order.id);
-        _clearDanglingOutgoing(columns, order.id);
-        break;
-      }
+      _ensureColumn(columns, usedHeights, columnIndex);
 
       final bool isPrimary = segmentIndex == 0;
       final double remaining = boardHeight - usedHeights[columnIndex];
       final double gap = columns[columnIndex].isEmpty ? 0 : KdsLayout.cardGap;
       final int remainingEnd = order.items.length;
-      final bool hasNextColumn = columnIndex + 1 < columnCount;
 
-      // Prefer finishing all remaining items in this column.
       final double fullFinalHeight =
           gap +
           estimateSegmentHeight(
@@ -247,18 +243,12 @@ PackedOrderBoard packOrderColumns({
           ),
         );
         usedHeights[columnIndex] += fullFinalHeight;
-        itemCursor = remainingEnd;
         break;
       }
 
-      // Find largest whole-item prefix that fits.
-      // Outgoing continuation is only allowed when another column exists.
       int bestEnd = itemCursor;
       for (int end = itemCursor + 1; end <= remainingEnd; end++) {
         final bool wouldContinue = end < remainingEnd;
-        if (wouldContinue && !hasNextColumn) {
-          break;
-        }
         final double candidate =
             gap +
             estimateSegmentHeight(
@@ -279,18 +269,15 @@ PackedOrderBoard packOrderColumns({
       }
 
       if (bestEnd == itemCursor) {
-        columnIndex++;
-        continue;
+        if (columns[columnIndex].isNotEmpty) {
+          columnIndex++;
+          continue;
+        }
+        // Empty lane still too short: place one item and continue right.
+        bestEnd = itemCursor + 1;
       }
 
       final bool willContinue = bestEnd < remainingEnd;
-      if (willContinue && !hasNextColumn) {
-        // Remainder cannot continue — overflow the unfinished order.
-        unplacedOrderIds.add(order.id);
-        _clearDanglingOutgoing(columns, order.id);
-        break;
-      }
-
       final double segmentHeight = estimateSegmentHeight(
         order: order,
         itemStartIndex: itemCursor,
@@ -322,44 +309,21 @@ PackedOrderBoard packOrderColumns({
         columnIndex++;
       }
     }
-
-    // Stay on the current column for chronological top-to-bottom fill.
   }
 
   return PackedOrderBoard(
     columns: columns,
     columnWidth: columnWidth,
-    unplacedOrderIds: unplacedOrderIds,
   );
 }
 
-/// Ensures we never leave a "Continued..." arrow without a following segment.
-void _clearDanglingOutgoing(
+void _ensureColumn(
   List<List<CardSegment>> columns,
-  String orderId,
+  List<double> usedHeights,
+  int index,
 ) {
-  for (int c = columns.length - 1; c >= 0; c--) {
-    final List<CardSegment> column = columns[c];
-    for (int i = column.length - 1; i >= 0; i--) {
-      final CardSegment segment = column[i];
-      if (segment.orderId != orderId) {
-        continue;
-      }
-      if (!segment.showOutgoingContinued) {
-        return;
-      }
-      column[i] = CardSegment(
-        orderId: segment.orderId,
-        segmentIndex: segment.segmentIndex,
-        itemStartIndex: segment.itemStartIndex,
-        itemEndIndex: segment.itemEndIndex,
-        isPrimary: segment.isPrimary,
-        isFinal: false,
-        showIncomingContinued: segment.showIncomingContinued,
-        showOutgoingContinued: false,
-        estimatedHeight: segment.estimatedHeight,
-      );
-      return;
-    }
+  while (columns.length <= index) {
+    columns.add(<CardSegment>[]);
+    usedHeights.add(0);
   }
 }

@@ -44,4 +44,7 @@ abstract final class KdsLayout {
 
   /// Prefer early split / next column over clipping; covers font/platform drift.
   static const double heightSafetyAllowance = 40;
+
+  /// `_OrderUpdatePulse` always paints a 3px border (idle or active).
+  static const double cardPulseBorderWidth = 3;
 }

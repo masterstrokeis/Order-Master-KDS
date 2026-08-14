@@ -138,7 +138,6 @@ void main() {
     expect(segment.isPrimary, isTrue);
     expect(segment.isFinal, isTrue);
     expect(segment.showOutgoingContinued, isFalse);
-    expect(board.unplacedOrderIds, isEmpty);
   });
 
   test('splits tall order into primary + continuation', () {
@@ -167,10 +166,9 @@ void main() {
     expect(all.first.showOutgoingContinued, isTrue);
     expect(all[1].showIncomingContinued, isTrue);
     expect(all.last.isFinal, isTrue);
-    expect(board.unplacedOrderIds, isEmpty);
   });
 
-  test('reports unplaced orders when board capacity is exhausted', () {
+  test('appends extra columns instead of dropping orders', () {
     final List<Order> orders = List<Order>.generate(
       20,
       (int i) => _order(
@@ -188,13 +186,51 @@ void main() {
       ),
     );
 
+    const double boardWidth =
+        KdsLayout.minimumColumnWidth * 2 + KdsLayout.cardGap;
     final PackedOrderBoard board = packOrderColumns(
       orders: orders,
-      boardWidth: KdsLayout.minimumColumnWidth * 2 + KdsLayout.cardGap,
+      boardWidth: boardWidth,
       boardHeight: 500,
     );
 
-    expect(board.unplacedOrderIds, isNotEmpty);
+    final int viewportCount = computeColumnCount(boardWidth);
+    expect(board.columns.length, greaterThan(viewportCount));
+    final Set<String> placedIds = board.columns
+        .expand((List<CardSegment> column) => column)
+        .map((CardSegment s) => s.orderId)
+        .toSet();
+    expect(placedIds, unorderedEquals(orders.map((Order o) => o.id)));
+  });
+
+  test('tall order continues past the viewport column count', () {
+    final List<OrderItem> items = List<OrderItem>.generate(
+      24,
+      (int i) => _item(
+        id: '$i',
+        name: 'Long named kitchen item number $i for wrapping',
+        modifierText: 'modifier line that also wraps for height $i',
+        note: 'special note $i',
+      ),
+    );
+
+    const double boardWidth = KdsLayout.minimumColumnWidth;
+    final PackedOrderBoard board = packOrderColumns(
+      orders: <Order>[_order(id: 'tall', items: items)],
+      boardWidth: boardWidth,
+      boardHeight: 400,
+    );
+
+    expect(computeColumnCount(boardWidth), 1);
+    expect(board.columns.length, greaterThan(1));
+    final List<CardSegment> placed = board.columns
+        .expand((List<CardSegment> column) => column)
+        .where((CardSegment s) => s.orderId == 'tall')
+        .toList();
+    expect(placed, isNotEmpty);
+    expect(placed.first.isPrimary, isTrue);
+    expect(placed.last.isFinal, isTrue);
+    expect(placed.last.itemEndIndex, items.length);
   });
 
   test('moves second order to next column when first column is full', () {
@@ -257,7 +293,46 @@ void main() {
     expect(board.columns[1].map((CardSegment s) => s.orderId), <String>[
       'ord2',
     ]);
-    expect(board.unplacedOrderIds, isEmpty);
+  });
+
+  test('later order does not appear between parts of a split order', () {
+    final List<OrderItem> tallItems = List<OrderItem>.generate(
+      12,
+      (int i) => _item(
+        id: 't$i',
+        name: 'Long named kitchen item number $i for wrapping',
+        modifierText: 'modifier line that also wraps for height $i',
+        note: 'special note $i',
+      ),
+    );
+    final Order tall = _order(
+      id: 'tall',
+      createdAt: DateTime(2026, 1, 1, 8, 2),
+      items: tallItems,
+    );
+    final Order short = _order(
+      id: 'short',
+      createdAt: DateTime(2026, 1, 1, 8, 6),
+      items: <OrderItem>[_item(id: 's1', name: 'Soup')],
+    );
+
+    final PackedOrderBoard board = packOrderColumns(
+      orders: <Order>[tall, short],
+      boardWidth: KdsLayout.minimumColumnWidth * 3 + KdsLayout.cardGap * 2,
+      boardHeight: 520,
+    );
+
+    final List<String> sequence = board.columns
+        .expand((List<CardSegment> column) => column)
+        .map((CardSegment s) => s.orderId)
+        .toList();
+    expect(sequence.where((String id) => id == 'tall'), isNotEmpty);
+    expect(sequence.where((String id) => id == 'short'), isNotEmpty);
+
+    final int firstTall = sequence.indexOf('tall');
+    final int lastTall = sequence.lastIndexOf('tall');
+    expect(sequence.sublist(firstTall, lastTall + 1), everyElement('tall'));
+    expect(sequence.indexOf('short'), greaterThan(lastTall));
   });
 
   test('removed prefix increases estimated item height', () {
