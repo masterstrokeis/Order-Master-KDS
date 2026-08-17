@@ -157,6 +157,42 @@ void main() {
         expect(order.status, status);
       }
     });
+
+    test('parses DINE-IN, TAKE AWAY, and DELIVERY wire values', () {
+      Order orderWithType(String type) {
+        return Order.fromJson(<String, dynamic>{
+          'id': 'ord_1:station_cash',
+          'displayNumber': '1',
+          'stationId': 'station_cash',
+          'createdAt': '2026-08-15T18:23:49',
+          'type': type,
+          'status': 'newOrder',
+          'tableNumber': null,
+          'items': <Map<String, dynamic>>[],
+        });
+      }
+
+      expect(orderWithType('DINE-IN').type, OrderType.dineIn);
+      expect(orderWithType('TAKE AWAY').type, OrderType.takeOut);
+      final Order delivery = orderWithType('DELIVERY');
+      expect(delivery.type, OrderType.delivery);
+      expect(delivery.tableNumber, isNull);
+    });
+
+    test('unknown type is preserved and does not throw', () {
+      final Order order = Order.fromJson(<String, dynamic>{
+        'id': 'ord_1:station_cash',
+        'displayNumber': '1',
+        'stationId': 'station_cash',
+        'createdAt': '2026-08-15T18:23:49',
+        'type': 'BUFFET',
+        'status': 'newOrder',
+        'items': <Map<String, dynamic>>[],
+      });
+      expect(order.type.kind, OrderTypeKind.other);
+      expect(order.type.displayLabel, 'BUFFET');
+      expect(order.type.serviceLabel(), 'BUFFET');
+    });
   });
 
   group('Station / Product.fromJson', () {

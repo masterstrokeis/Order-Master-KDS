@@ -43,3 +43,21 @@ bool isVisibleOnCookingTab({
     OrderStatus.completed => false,
   };
 }
+
+bool hasCookingBoardOrders({
+  required List<Order> orders,
+  required String? stationId,
+  required DateTime now,
+  required Duration cancelledDisplayDuration,
+}) {
+  return orders.any((Order order) {
+    if (stationId != null && order.stationId != stationId) {
+      return false;
+    }
+    return isVisibleOnCookingTab(
+      order: order,
+      now: now,
+      cancelledDisplayDuration: cancelledDisplayDuration,
+    );
+  });
+}

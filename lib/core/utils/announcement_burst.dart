@@ -1,5 +1,6 @@
 import '../../models/kds_order_event.dart';
 import 'order_announcement.dart';
+import 'order_title_number.dart';
 
 const Duration announcementBurstWindow = Duration(seconds: 2);
 const int announcementBurstThreshold = 4;
@@ -40,6 +41,8 @@ AnnouncementBurstResult applyAnnouncementBurst({
   required TimedAnnouncementEvent incoming,
   required DateTime now,
   required List<String> pending,
+  OrderTitleNumberSource titleNumberSource =
+      OrderTitleNumberSource.displayNumber,
 }) {
   final DateTime windowStart = now.subtract(announcementBurstWindow);
   final List<TimedAnnouncementEvent> inWindow = recent
@@ -68,7 +71,8 @@ AnnouncementBurstResult applyAnnouncementBurst({
       event: winner,
       at: incoming.at,
     );
-    if (announcementFor(winner) == announcementFor(current) &&
+    if (announcementFor(winner, titleNumberSource: titleNumberSource) ==
+            announcementFor(current, titleNumberSource: titleNumberSource) &&
         winner.kind == current.kind) {
       return AnnouncementBurstResult(
         pending: livePending,
@@ -98,7 +102,10 @@ AnnouncementBurstResult applyAnnouncementBurst({
     );
   }
 
-  final String line = announcementFor(toSpeak);
+  final String line = announcementFor(
+    toSpeak,
+    titleNumberSource: titleNumberSource,
+  );
   if (isKitchenCriticalAnnouncement(toSpeak.kind)) {
     return AnnouncementBurstResult(
       pending: <String>[...livePending, line],

@@ -1,17 +1,16 @@
 import '../../models/kds_order_event.dart';
 import '../../models/order_model.dart';
+import 'order_title_number.dart';
 
-String spokenOrderType(OrderType type) {
-  return switch (type) {
-    OrderType.dineIn => 'Dine-in',
-    OrderType.takeOut => 'Takeaway',
-    OrderType.delivery => 'Delivery',
-  };
-}
+String spokenOrderType(OrderType type) => type.spokenLabel;
 
-String announcementFor(KdsOrderEvent event) {
+String announcementFor(
+  KdsOrderEvent event, {
+  OrderTitleNumberSource titleNumberSource =
+      OrderTitleNumberSource.displayNumber,
+}) {
   final String type = spokenOrderType(event.type);
-  final String number = event.displayNumber;
+  final String number = eventTitleNumber(event, titleNumberSource);
   return switch (event.kind) {
     KdsOrderEventKind.newOrder => '$type order $number, new order.',
     KdsOrderEventKind.cancelled => '$type order $number, order cancelled.',

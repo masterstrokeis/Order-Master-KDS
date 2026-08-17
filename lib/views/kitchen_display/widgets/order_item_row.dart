@@ -13,12 +13,14 @@ class OrderItemList extends StatelessWidget {
     required this.orderStatus,
     required this.onToggleItem,
     required this.onAcknowledgeRemoved,
+    this.allowMutations = true,
   });
 
   final List<OrderItem> items;
   final OrderStatus orderStatus;
   final void Function(String itemId) onToggleItem;
   final void Function(String itemId) onAcknowledgeRemoved;
+  final bool allowMutations;
 
   @override
   Widget build(BuildContext context) {
@@ -28,10 +30,13 @@ class OrderItemList extends StatelessWidget {
         for (final OrderItem item in items) ...[
           OrderItemRow(
             item: item,
-            canToggle:
-                orderStatus == OrderStatus.cooking && !item.isRemoved,
+            canToggle: allowMutations &&
+                orderStatus == OrderStatus.cooking &&
+                !item.isRemoved,
             onDoubleTap: () => onToggleItem(item.id),
-            onAcknowledgeRemoved: () => onAcknowledgeRemoved(item.id),
+            onAcknowledgeRemoved: allowMutations
+                ? () => onAcknowledgeRemoved(item.id)
+                : null,
           ),
           const SizedBox(height: AppSpacing.gutter),
         ],
@@ -52,7 +57,7 @@ class OrderItemRow extends StatelessWidget {
   final OrderItem item;
   final bool canToggle;
   final VoidCallback onDoubleTap;
-  final VoidCallback onAcknowledgeRemoved;
+  final VoidCallback? onAcknowledgeRemoved;
 
   @override
   Widget build(BuildContext context) {
@@ -151,7 +156,7 @@ class OrderItemRow extends StatelessWidget {
             ],
           ),
         ),
-        if (highlightRemovedUnseen)
+        if (highlightRemovedUnseen && onAcknowledgeRemoved != null)
           TextButton(
             onPressed: onAcknowledgeRemoved,
             style: TextButton.styleFrom(

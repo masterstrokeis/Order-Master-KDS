@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../core/constants/kds_timing.dart';
 import '../core/utils/announcement_burst.dart';
 import '../core/utils/order_announcement.dart';
+import '../core/utils/order_title_number.dart';
 import '../models/kds_order_event.dart';
 import '../providers/kds_backend_providers.dart';
+import '../providers/order_title_number_providers.dart';
 import '../services/announcement_preference_service.dart';
 import '../services/kds_tts_service.dart';
 import '../services/order_update_pulse_preference_service.dart';
@@ -113,12 +115,16 @@ class VoiceAnnouncementController extends Notifier<void> {
 
     final DateTime now = DateTime.now().toUtc();
     final KdsTtsService tts = ref.read(kdsTtsServiceProvider);
+    final OrderTitleNumberSource titleNumberSource = ref.read(
+      orderTitleNumberSourceProvider,
+    );
     for (final KdsOrderEvent event in coalesceAnnouncements(batch)) {
       final AnnouncementBurstResult result = applyAnnouncementBurst(
         recent: _recent,
         incoming: TimedAnnouncementEvent(event: event, at: now),
         now: now,
         pending: _pending,
+        titleNumberSource: titleNumberSource,
       );
       _recent = result.recent;
       _pending = result.pending;

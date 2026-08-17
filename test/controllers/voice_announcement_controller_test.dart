@@ -4,9 +4,11 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:order_master_kds/controllers/order_controller.dart';
 import 'package:order_master_kds/controllers/voice_announcement_controller.dart';
 import 'package:order_master_kds/core/utils/order_announcement.dart';
+import 'package:order_master_kds/core/utils/order_title_number.dart';
 import 'package:order_master_kds/models/kds_order_event.dart';
 import 'package:order_master_kds/models/order_model.dart';
 import 'package:order_master_kds/providers/kds_backend_providers.dart';
+import 'package:order_master_kds/providers/order_title_number_providers.dart';
 import 'package:order_master_kds/services/kds_tts_service.dart';
 
 const String _station = 'station_grill';
@@ -57,6 +59,34 @@ void main() {
 
     expect(tts.spoken, <String>[announcementFor(event)]);
     expect(container.read(orderUpdatePulseUntilProvider), isEmpty);
+  });
+
+  test('matching station speaks kot number when KOT source is selected', () async {
+    final _RecordingKdsTts tts = _RecordingKdsTts();
+    final ProviderContainer container = _container(
+      tts: tts,
+      stationId: _station,
+      titleNumberSource: OrderTitleNumberSource.kotNumber,
+    );
+    addTearDown(container.dispose);
+    container.listen(voiceAnnouncementProvider, (_, _) {});
+
+    final KdsOrderEvent event = _event(
+      kind: KdsOrderEventKind.newOrder,
+      kotNumber: '12',
+    );
+    _emit(container, event);
+    await pumpEventQueue();
+
+    expect(
+      tts.spoken,
+      <String>[
+        announcementFor(
+          event,
+          titleNumberSource: OrderTitleNumberSource.kotNumber,
+        ),
+      ],
+    );
   });
 
   test('four item events on one order speak one updated line', () async {
@@ -214,6 +244,8 @@ ProviderContainer _container({
   bool enabled = true,
   required String stationId,
   int pulseSeconds = 30,
+  OrderTitleNumberSource titleNumberSource =
+      OrderTitleNumberSource.displayNumber,
 }) {
   return ProviderContainer(
     overrides: [
@@ -221,6 +253,9 @@ ProviderContainer _container({
       announcementsEnabledProvider.overrideWith((Ref ref) => enabled),
       selectedStationProvider.overrideWith((Ref ref) => stationId),
       orderUpdatePulseSecondsProvider.overrideWith((Ref ref) => pulseSeconds),
+      orderTitleNumberSourceProvider.overrideWith(
+        (Ref ref) => titleNumberSource,
+      ),
     ],
   );
 }
@@ -233,6 +268,7 @@ KdsOrderEvent _event({
   required KdsOrderEventKind kind,
   String orderId = 'ord_125',
   String displayNumber = '125',
+  String? kotNumber,
   String? itemName,
   int? oldQuantity,
   int? newQuantity,
@@ -244,6 +280,7 @@ KdsOrderEvent _event({
     kind: kind,
     orderId: orderId,
     displayNumber: displayNumber,
+    kotNumber: kotNumber,
     stationId: _station,
     type: type,
     itemName: itemName,

@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/order_column_packer.dart';
+import '../../../core/utils/order_title_number.dart';
 import '../../../models/order_item_model.dart';
 import '../../../models/order_model.dart';
 import '../../../models/urgency_settings.dart';
@@ -14,6 +15,7 @@ import '../../../providers/providers.dart';
 import 'continued_label.dart';
 import 'order_action_footer.dart';
 import 'order_item_row.dart';
+import 'order_note_band.dart';
 import 'order_type_row.dart';
 import 'status_header_band.dart';
 
@@ -82,6 +84,11 @@ class OrderCard extends ConsumerWidget {
       ),
     );
     final List<OrderItem> items = segment.itemsFor(order);
+    final bool staleLeftover = ref.watch(
+      staleLeftoverOrderIdsProvider.select(
+        (Set<String> ids) => ids.contains(order.id),
+      ),
+    );
 
     return _OrderUpdatePulse(
       orderId: segment.orderId,
@@ -106,7 +113,10 @@ class OrderCard extends ConsumerWidget {
               children: [
                 if (segment.isPrimary)
                   StatusHeaderBand(
-                    displayNumber: order.displayNumber,
+                    displayNumber: orderTitleNumber(
+                      order,
+                      ref.watch(orderTitleNumberSourceProvider),
+                    ),
                     createdAt: order.createdAt,
                     orderType: order.type,
                     status: order.status,
@@ -118,6 +128,8 @@ class OrderCard extends ConsumerWidget {
                     tableNumber: order.tableNumber,
                     customerName: order.customerName,
                   ),
+                if (segment.isPrimary && hasVisibleOrderNote(order.note))
+                  OrderNoteBand(note: order.note!.trim()),
                 if (segment.showIncomingContinued)
                   const ContinuedLabel(
                     direction: ContinuedLabelDirection.incoming,
@@ -130,6 +142,7 @@ class OrderCard extends ConsumerWidget {
                       OrderItemList(
                         items: items,
                         orderStatus: order.status,
+                        allowMutations: !staleLeftover,
                         onToggleItem: (String itemId) {
                           ref
                               .read(orderControllerProvider.notifier)
@@ -150,12 +163,19 @@ class OrderCard extends ConsumerWidget {
                         OrderActionFooter(
                           status: order.status,
                           accentColor: accent,
-                          onStart: () =>
-                              ref.read(orderControllerProvider.notifier).startOrder(order.id),
-                          onComplete: () =>
-                              ref.read(orderControllerProvider.notifier).completeOrder(order.id),
-                          onRollback: () =>
-                              ref.read(orderControllerProvider.notifier).rollbackOrder(order.id),
+                          staleLeftover: staleLeftover,
+                          onStart: () => ref
+                              .read(orderControllerProvider.notifier)
+                              .startOrder(order.id),
+                          onComplete: () => ref
+                              .read(orderControllerProvider.notifier)
+                              .completeOrder(order.id),
+                          onRollback: () => ref
+                              .read(orderControllerProvider.notifier)
+                              .rollbackOrder(order.id),
+                          onClear: () => ref
+                              .read(orderControllerProvider.notifier)
+                              .dismissStaleOrder(order.id),
                         ),
                       ],
                     ],

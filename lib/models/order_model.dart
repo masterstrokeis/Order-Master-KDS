@@ -1,10 +1,11 @@
 import 'order_item_model.dart';
+import 'order_type.dart';
+
+export 'order_type.dart';
 
 enum OrderStatus { newOrder, cooking, completed, cancelled }
 
 enum OrderUrgency { normal, warning, critical }
-
-enum OrderType { dineIn, delivery, takeOut }
 
 class Order {
   Order({
@@ -55,7 +56,7 @@ class Order {
       completedAt: json['completedAt'] == null
           ? null
           : DateTime.parse(json['completedAt'] as String),
-      type: OrderType.values.byName(json['type'] as String),
+      type: OrderType.parse(json['type'] as String? ?? ''),
       status: OrderStatus.values.byName(json['status'] as String),
       tableNumber: json['tableNumber'] as String?,
       customerName: json['customerName'] as String?,

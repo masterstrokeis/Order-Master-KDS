@@ -11,6 +11,9 @@ import '../models/websocket_config.dart';
 
 typedef OrderEventHandler = void Function(Order order, String? cursor);
 typedef SyncRequiredHandler = void Function();
+typedef ShiftEventHandler = void Function(ShiftEventKind kind, String message);
+
+enum ShiftEventKind { opened, closed }
 
 /// WebSocket client: hello, ping/pong, order.created/updated, reconnect backoff.
 class KdsWebSocketService {
@@ -29,6 +32,7 @@ class KdsWebSocketService {
   Timer? _watchdogTimer;
   DateTime? _lastMessageAt;
   int _reconnectAttempt = 0;
+  int _openGeneration = 0;
   bool _disposed = false;
   bool _intentionalClose = false;
 
@@ -38,8 +42,15 @@ class KdsWebSocketService {
   String? _stationId;
   String? _lastCursor;
 
+  /// Last successfully applied order cursor (not the server.hello head).
+  String? Function()? resolveAppliedCursor;
+
+  /// Current auth session so reconnects pick up a refreshed access token.
+  AuthSession? Function()? resolveSession;
+
   OrderEventHandler? onOrderEvent;
   SyncRequiredHandler? onSyncRequired;
+  ShiftEventHandler? onShiftEvent;
   void Function(Object error)? onError;
 
   bool get isConnected => _channel != null;
@@ -86,10 +97,7 @@ class KdsWebSocketService {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     _cancelWatchdog();
-    await _subscription?.cancel();
-    _subscription = null;
-    await _channel?.sink.close();
-    _channel = null;
+    await _releaseChannel();
   }
 
   void dispose() {
@@ -97,14 +105,30 @@ class KdsWebSocketService {
     disconnect(intentional: true);
   }
 
+  String? get _helloCursor => resolveAppliedCursor?.call() ?? _lastCursor;
+
+  AuthSession? get _resolvedSession => resolveSession?.call() ?? _session;
+
+  Future<void> _releaseChannel() async {
+    await _subscription?.cancel();
+    _subscription = null;
+    await _channel?.sink.close();
+    _channel = null;
+  }
+
   Future<void> _open() async {
     if (_disposed || _useMockBackend) {
       return;
     }
+    final int generation = ++_openGeneration;
     final WebsocketConfig config = _config!;
-    final AuthSession session = _session!;
-    final String deviceId = _deviceId!;
-    final String stationId = _stationId!;
+    final AuthSession? session = _resolvedSession;
+    final String? deviceId = _deviceId;
+    final String? stationId = _stationId;
+    if (session == null || deviceId == null || stationId == null) {
+      return;
+    }
+    _session = session;
 
     final Uri uri = Uri.parse(config.url).replace(
       queryParameters: <String, String>{
@@ -132,7 +156,7 @@ class KdsWebSocketService {
         const Duration(seconds: 8),
         onTimeout: () => throw TimeoutException('WS connect timed out'),
       );
-      if (_disposed || _intentionalClose) {
+      if (_disposed || _intentionalClose || generation != _openGeneration) {
         await channel.sink.close();
         return;
       }
@@ -154,14 +178,18 @@ class KdsWebSocketService {
         cancelOnError: true,
       );
 
+      final String? lastCursor = _helloCursor;
       channel.sink.add(
         jsonEncode(<String, dynamic>{
           'type': 'client.hello',
           'messageId': 'hello_${DateTime.now().millisecondsSinceEpoch}',
-          if (_lastCursor != null) 'lastCursor': _lastCursor,
+          'lastCursor': ?lastCursor,
         }),
       );
     } catch (error) {
+      if (generation != _openGeneration) {
+        return;
+      }
       KdsApiLogger.websocket('connect failed: $error');
       onError?.call(error);
       _scheduleReconnect();
@@ -182,11 +210,8 @@ class KdsWebSocketService {
 
     switch (type) {
       case 'server.hello':
+        // Do not treat hello.cursor as applied — that is the server head.
         final bool syncRequired = decoded['syncRequired'] as bool? ?? false;
-        final String? cursor = decoded['cursor'] as String?;
-        if (cursor != null) {
-          _lastCursor = cursor;
-        }
         if (syncRequired) {
           onSyncRequired?.call();
         }
@@ -200,6 +225,10 @@ class KdsWebSocketService {
             'clientTime': DateTime.now().toUtc().toIso8601String(),
           }),
         );
+        break;
+      case 'shift.opened':
+      case 'shift.closed':
+        _handleShiftEvent(type, decoded, raw);
         break;
       case 'order.created':
       case 'order.updated':
@@ -230,6 +259,31 @@ class KdsWebSocketService {
         KdsApiLogger.websocket('← unrecognized type=${type ?? 'null'}: $raw');
         break;
     }
+  }
+
+  void _handleShiftEvent(
+    String? type,
+    Map<String, dynamic> decoded,
+    dynamic raw,
+  ) {
+    final Object? payload = decoded['payload'];
+    if (payload is! Map) {
+      KdsApiLogger.websocket(
+        'shift event received but payload missing/unparseable: $raw',
+      );
+      return;
+    }
+    final Object? messageRaw = payload['message'];
+    if (messageRaw is! String || messageRaw.trim().isEmpty) {
+      KdsApiLogger.websocket(
+        'shift event received but payload.message missing/blank: $raw',
+      );
+      return;
+    }
+    final ShiftEventKind kind = type == 'shift.opened'
+        ? ShiftEventKind.opened
+        : ShiftEventKind.closed;
+    onShiftEvent?.call(kind, messageRaw.trim());
   }
 
   void _startWatchdog() {
@@ -281,8 +335,7 @@ class KdsWebSocketService {
       return;
     }
     _cancelWatchdog();
-    _channel = null;
-    _subscription = null;
+    unawaited(_releaseChannel());
     _reconnectTimer?.cancel();
 
     final WebsocketConfig config = _config!;
@@ -293,7 +346,7 @@ class KdsWebSocketService {
     );
     _reconnectAttempt++;
     _reconnectTimer = Timer(Duration(milliseconds: delayMs), () {
-      _open();
+      unawaited(_open());
     });
   }
 

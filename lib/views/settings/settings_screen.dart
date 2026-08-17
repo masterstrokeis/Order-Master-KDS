@@ -10,6 +10,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/urgency_color_presets.dart';
 import '../../core/utils/order_announcement.dart';
+import '../../core/utils/order_title_number.dart';
 import '../../models/server_config.dart';
 import '../../models/urgency_settings.dart';
 import '../../providers/providers.dart';
@@ -340,6 +341,8 @@ class _AppearanceSection extends ConsumerWidget {
       children: [
         const DarkModeToggle(),
         const SizedBox(height: AppSpacing.gutter),
+        const _OrderTitleNumberPicker(),
+        const SizedBox(height: AppSpacing.gutter),
         Row(
           children: [
             Switch.adaptive(
@@ -366,6 +369,56 @@ class _AppearanceSection extends ConsumerWidget {
                 fontSize: 13,
               ),
             ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _OrderTitleNumberPicker extends ConsumerWidget {
+  const _OrderTitleNumberPicker();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    final OrderTitleNumberSource selected = ref.watch(
+      orderTitleNumberSourceProvider,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Order title number',
+          style: AppTextStyles.bodyMd.copyWith(color: colorScheme.onSurface),
+        ),
+        const SizedBox(height: AppSpacing.unit),
+        Wrap(
+          spacing: AppSpacing.unit,
+          runSpacing: AppSpacing.unit,
+          children: [
+            for (final OrderTitleNumberSource source
+                in OrderTitleNumberSource.values)
+              ChoiceChip(
+                key: Key('order-title-number-${source.name}'),
+                label: Text(
+                  source == OrderTitleNumberSource.displayNumber
+                      ? 'Display number'
+                      : 'KOT number',
+                ),
+                selected: selected == source,
+                onSelected: (bool isSelected) async {
+                  if (!isSelected) {
+                    return;
+                  }
+                  ref.read(orderTitleNumberSourceProvider.notifier).state =
+                      source;
+                  await ref
+                      .read(orderTitleNumberPreferenceServiceProvider)
+                      .save(source);
+                },
+              ),
           ],
         ),
       ],

@@ -7,8 +7,10 @@ import 'app.dart';
 import 'controllers/urgency_settings_controller.dart';
 import 'models/server_config.dart';
 import 'models/urgency_settings.dart';
+import 'core/utils/order_title_number.dart';
 import 'providers/providers.dart';
 import 'services/announcement_preference_service.dart';
+import 'services/order_title_number_preference_service.dart';
 import 'services/order_update_pulse_preference_service.dart';
 import 'services/product_quantity_list_preference_service.dart';
 import 'services/server_config_service.dart';
@@ -51,6 +53,11 @@ Future<void> main() async {
   final bool initialProductQuantityListVisible =
       await productQuantityListService.load();
 
+  final OrderTitleNumberPreferenceService orderTitleNumberService =
+      OrderTitleNumberPreferenceService();
+  final OrderTitleNumberSource initialOrderTitleNumber =
+      await orderTitleNumberService.load();
+
   runApp(
     ProviderScope(
       overrides: [
@@ -60,6 +67,9 @@ Future<void> main() async {
         ),
         productQuantityListVisibleProvider.overrideWith(
           (Ref ref) => initialProductQuantityListVisible,
+        ),
+        orderTitleNumberSourceProvider.overrideWith(
+          (Ref ref) => initialOrderTitleNumber,
         ),
         orderUpdatePulseSecondsProvider.overrideWith(
           (Ref ref) => initialPulseSeconds,

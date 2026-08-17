@@ -128,6 +128,24 @@ double estimateItemHeight(OrderItem item, double columnWidth) {
   return height + KdsLayout.itemVerticalGap;
 }
 
+bool hasVisibleOrderNote(String? note) {
+  return note != null && note.trim().isNotEmpty;
+}
+
+double estimateOrderNoteHeight(String? note, double columnWidth) {
+  if (!hasVisibleOrderNote(note)) {
+    return 0;
+  }
+  final double textWidth =
+      columnWidth - (KdsLayout.cardBodyHorizontalPadding * 2);
+  final int noteLines = estimateWrappedLineCount(
+    'Note: ${note!.trim()}',
+    textWidth,
+  );
+  return KdsLayout.orderNoteBandVerticalPadding +
+      noteLines * KdsLayout.noteLineHeight;
+}
+
 double estimateSegmentChrome({
   required bool isPrimary,
   required bool isFinal,
@@ -174,7 +192,8 @@ double estimateSegmentHeight({
         isFinal: isFinal,
         showIncomingContinued: showIncomingContinued,
         showOutgoingContinued: showOutgoingContinued,
-      );
+      ) +
+      (isPrimary ? estimateOrderNoteHeight(order.note, columnWidth) : 0);
 }
 
 PackedOrderBoard packOrderColumns({

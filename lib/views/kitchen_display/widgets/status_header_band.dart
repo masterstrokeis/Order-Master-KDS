@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/utils/order_type_display.dart';
 import '../../../models/order_model.dart';
 
 class StatusHeaderBand extends StatelessWidget {
@@ -86,11 +87,8 @@ class OrderTypeHeaderIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ({IconData icon, String label}) meta = switch (orderType) {
-      OrderType.dineIn => (icon: Icons.table_restaurant, label: 'Dine-In'),
-      OrderType.delivery => (icon: Icons.delivery_dining, label: 'Delivery'),
-      OrderType.takeOut => (icon: Icons.shopping_bag_outlined, label: 'Take-Out'),
-    };
+    final IconData icon = orderTypeHeaderIcon(orderType);
+    final String label = orderType.displayLabel;
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -104,10 +102,10 @@ class OrderTypeHeaderIndicator extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(meta.icon, size: 14, color: AppColors.onStatusHeader),
+          Icon(icon, size: 14, color: AppColors.onStatusHeader),
           const SizedBox(width: 4),
           Text(
-            meta.label,
+            label,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: AppColors.onStatusHeader,
               fontSize: 11,

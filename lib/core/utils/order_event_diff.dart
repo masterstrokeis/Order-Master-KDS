@@ -116,6 +116,7 @@ KdsOrderEvent _event(
     kind: kind,
     orderId: order.id,
     displayNumber: order.displayNumber,
+    kotNumber: order.kotNumber,
     stationId: order.stationId,
     type: order.type,
     tableNumber: order.tableNumber,

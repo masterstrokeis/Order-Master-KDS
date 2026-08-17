@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/utils/order_type_display.dart';
 import '../../../models/order_model.dart';
 
 class OrderTypeRow extends StatelessWidget {
@@ -18,15 +19,8 @@ class OrderTypeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final String detailLabel = switch (type) {
-      OrderType.dineIn => 'Table - ${tableNumber ?? '--'}',
-      OrderType.delivery => 'Delivery',
-      OrderType.takeOut => 'Take-Out',
-    };
-    final IconData personIcon = switch (type) {
-      OrderType.delivery => Icons.two_wheeler,
-      OrderType.dineIn || OrderType.takeOut => Icons.person,
-    };
+    final String detailLabel = type.serviceLabel(tableNumber: tableNumber);
+    final IconData personIcon = orderTypeCustomerIcon(type);
 
     return Container(
       width: double.infinity,

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_spacing.dart';
-import '../../../models/order_model.dart';
+import '../../../core/utils/order_type_display.dart';
 import '../prep_line.dart';
 
 class PrepLineRow extends StatelessWidget {
@@ -45,7 +45,7 @@ class PrepLineRow extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     _OrderContext(
-                      icon: _typeIcon(line.orderType),
+                      icon: orderTypePrepIcon(line.orderType),
                       label: 'Order #${line.displayNumber}',
                     ),
                     Text(
@@ -113,14 +113,6 @@ class PrepLineRow extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  IconData _typeIcon(OrderType type) {
-    return switch (type) {
-      OrderType.dineIn => Icons.table_restaurant_outlined,
-      OrderType.delivery => Icons.delivery_dining_outlined,
-      OrderType.takeOut => Icons.shopping_bag_outlined,
-    };
   }
 
   String _formatTime(DateTime time) {

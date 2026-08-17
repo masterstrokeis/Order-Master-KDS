@@ -4,6 +4,7 @@ abstract final class KdsTiming {
   static const Duration clockTickInterval = Duration(seconds: 3);
   static const Duration orderUpdateHighlightDuration = Duration(seconds: 30);
   static const Duration cancelledCookingDisplayDuration = Duration(seconds: 30);
+  static const Duration shiftNoticeDuration = Duration(seconds: 4);
   static const List<int> cancelledCookingDisplayOptionsSeconds = <int>[
     15,
     30,

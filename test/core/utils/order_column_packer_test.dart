@@ -26,6 +26,7 @@ Order _order({
   required String id,
   required List<OrderItem> items,
   DateTime? createdAt,
+  String? note,
 }) {
   return Order(
     id: id,
@@ -36,6 +37,7 @@ Order _order({
     status: OrderStatus.newOrder,
     tableNumber: '05',
     customerName: 'Test Guest',
+    note: note,
     items: items,
   );
 }
@@ -138,6 +140,68 @@ void main() {
     expect(segment.isPrimary, isTrue);
     expect(segment.isFinal, isTrue);
     expect(segment.showOutgoingContinued, isFalse);
+  });
+
+  test('primary segment is taller when the order has a note', () {
+    const double columnWidth = KdsLayout.minimumColumnWidth;
+    final List<OrderItem> items = <OrderItem>[_item(id: '1', name: 'Soup')];
+    final Order plain = _order(id: 'a', items: items);
+    final Order withNote = _order(id: 'b', items: items, note: 'No spicy');
+
+    expect(hasVisibleOrderNote(plain.note), isFalse);
+    expect(hasVisibleOrderNote('   '), isFalse);
+    expect(hasVisibleOrderNote(withNote.note), isTrue);
+
+    final double extra = estimateOrderNoteHeight(withNote.note, columnWidth);
+    expect(
+      extra,
+      KdsLayout.orderNoteBandVerticalPadding + KdsLayout.noteLineHeight,
+    );
+    expect(
+      estimateSegmentHeight(
+            order: withNote,
+            itemStartIndex: 0,
+            itemEndIndex: 1,
+            columnWidth: columnWidth,
+            isPrimary: true,
+            isFinal: true,
+            showIncomingContinued: false,
+            showOutgoingContinued: false,
+          ) -
+          estimateSegmentHeight(
+            order: plain,
+            itemStartIndex: 0,
+            itemEndIndex: 1,
+            columnWidth: columnWidth,
+            isPrimary: true,
+            isFinal: true,
+            showIncomingContinued: false,
+            showOutgoingContinued: false,
+          ),
+      extra,
+    );
+    expect(
+      estimateSegmentHeight(
+        order: withNote,
+        itemStartIndex: 0,
+        itemEndIndex: 1,
+        columnWidth: columnWidth,
+        isPrimary: false,
+        isFinal: true,
+        showIncomingContinued: true,
+        showOutgoingContinued: false,
+      ),
+      estimateSegmentHeight(
+        order: plain,
+        itemStartIndex: 0,
+        itemEndIndex: 1,
+        columnWidth: columnWidth,
+        isPrimary: false,
+        isFinal: true,
+        showIncomingContinued: true,
+        showOutgoingContinued: false,
+      ),
+    );
   });
 
   test('splits tall order into primary + continuation', () {

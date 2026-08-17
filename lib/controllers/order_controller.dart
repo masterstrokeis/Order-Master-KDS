@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/utils/cancelled_cooking_visibility.dart';
@@ -22,9 +23,17 @@ class OrderController extends AsyncNotifier<List<Order>> {
   final Uuid _uuid = const Uuid();
   String? _syncCursor;
   String? _lastActionMessage;
+  Set<String> _staleOrderIds = <String>{};
 
   String? get syncCursor => _syncCursor;
   String? get lastActionMessage => _lastActionMessage;
+
+  bool isStaleLeftover(String orderId) => _staleOrderIds.contains(orderId);
+
+  void _publishStaleIds() {
+    ref.read(staleLeftoverOrderIdsProvider.notifier).state =
+        Set<String>.of(_staleOrderIds);
+  }
 
   KdsApiService get _api => ref.read(kdsApiServiceProvider);
 
@@ -42,9 +51,11 @@ class OrderController extends AsyncNotifier<List<Order>> {
   Future<void> refresh() async {
     state = const AsyncLoading<List<Order>>();
     state = await AsyncValue.guard(_loadOrders);
+    _publishStaleIds();
   }
 
   Future<List<Order>> _loadOrders() async {
+    _staleOrderIds = <String>{};
     final AuthSession? session = _session;
     final String? deviceId = _deviceId;
     final String? stationId = _stationId;
@@ -78,6 +89,9 @@ class OrderController extends AsyncNotifier<List<Order>> {
   }
 
   Future<void> startOrder(String orderId) async {
+    if (isStaleLeftover(orderId)) {
+      return;
+    }
     await _runOrderAction(
       orderId: orderId,
       allowedFrom: OrderStatus.newOrder,
@@ -93,6 +107,9 @@ class OrderController extends AsyncNotifier<List<Order>> {
   }
 
   Future<void> completeOrder(String orderId) async {
+    if (isStaleLeftover(orderId)) {
+      return;
+    }
     await _runOrderAction(
       orderId: orderId,
       allowedFrom: OrderStatus.cooking,
@@ -108,6 +125,9 @@ class OrderController extends AsyncNotifier<List<Order>> {
   }
 
   Future<void> rollbackOrder(String orderId) async {
+    if (isStaleLeftover(orderId)) {
+      return;
+    }
     await _runOrderAction(
       orderId: orderId,
       allowedFrom: OrderStatus.completed,
@@ -129,7 +149,9 @@ class OrderController extends AsyncNotifier<List<Order>> {
     }
 
     final Order? order = _find(orders, orderId);
-    if (order == null || order.status != OrderStatus.cooking) {
+    if (order == null ||
+        order.status != OrderStatus.cooking ||
+        isStaleLeftover(orderId)) {
       return;
     }
 
@@ -180,7 +202,7 @@ class OrderController extends AsyncNotifier<List<Order>> {
     }
 
     final Order? order = _find(orders, orderId);
-    if (order == null) {
+    if (order == null || isStaleLeftover(orderId)) {
       return;
     }
     final OrderItem? item = _findItem(order, itemId);
@@ -223,7 +245,15 @@ class OrderController extends AsyncNotifier<List<Order>> {
   }
 
   /// Full-state replace from WebSocket / sync (keyed by opaque order id).
+  ///
+  /// Skips a snapshot whose [Order.version] is older than the ticket already
+  /// on the board so a delayed `/sync` event cannot wipe a newer live update.
   void replaceOrder(Order order) {
+    final List<Order> current = state.value ?? <Order>[];
+    final int index = current.indexWhere((Order o) => o.id == order.id);
+    if (index >= 0 && order.version < current[index].version) {
+      return;
+    }
     _replaceLocal(order, insertIfMissing: true, emitEvents: true);
   }
 
@@ -231,6 +261,46 @@ class OrderController extends AsyncNotifier<List<Order>> {
     if (cursor != null && cursor.isNotEmpty) {
       _syncCursor = cursor;
     }
+  }
+
+  /// Snapshot every ticket currently on the board as previous-shift leftovers.
+  /// Reassigns [state] so cards rebuild with Clear footers.
+  void markCurrentOrdersStale() {
+    final List<Order>? orders = state.value;
+    if (orders == null) {
+      _staleOrderIds = <String>{};
+      return;
+    }
+    _staleOrderIds = orders.map((Order order) => order.id).toSet();
+    _publishStaleIds();
+    state = AsyncData<List<Order>>(List<Order>.of(orders));
+  }
+
+  /// Client-only dismiss of one leftover ticket. Live (non-stale) ids are a no-op.
+  void dismissStaleOrder(String orderId) {
+    if (!isStaleLeftover(orderId)) {
+      return;
+    }
+    final List<Order>? orders = state.value;
+    if (orders == null) {
+      return;
+    }
+    _staleOrderIds.remove(orderId);
+    _publishStaleIds();
+    state = AsyncData<List<Order>>(
+      orders.where((Order order) => order.id != orderId).toList(),
+    );
+  }
+
+  /// Client-only wipe of the on-screen list. Does not emit order events or
+  /// change [syncCursor] — shift notices are not sync state.
+  void clearStationOrders() {
+    if (state.value == null) {
+      return;
+    }
+    _staleOrderIds = <String>{};
+    _publishStaleIds();
+    state = const AsyncData<List<Order>>(<Order>[]);
   }
 
   Future<void> applySyncResult(SyncResult result) async {
@@ -461,3 +531,8 @@ final StreamProvider<KdsOrderEvent> orderEventsProvider =
     StreamProvider<KdsOrderEvent>((Ref ref) {
       return ref.watch(orderEventsControllerProvider).stream;
     });
+
+/// IDs snapshotted at [OrderController.markCurrentOrdersStale]. Cards watch
+/// this instead of the notifier so isolated widget tests need not load orders.
+final StateProvider<Set<String>> staleLeftoverOrderIdsProvider =
+    StateProvider<Set<String>>((Ref ref) => <String>{});

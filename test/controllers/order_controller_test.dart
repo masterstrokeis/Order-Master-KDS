@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:order_master_kds/controllers/auth_controller.dart';
 import 'package:order_master_kds/controllers/order_controller.dart';
+import 'package:order_master_kds/core/utils/order_column_packer.dart';
 import 'package:order_master_kds/models/auth_session.dart';
 import 'package:order_master_kds/models/kds_api_error.dart';
 import 'package:order_master_kds/models/kds_order_event.dart';
@@ -9,7 +10,7 @@ import 'package:order_master_kds/models/order_item_model.dart';
 import 'package:order_master_kds/models/order_model.dart';
 import 'package:order_master_kds/models/restaurant_model.dart';
 import 'package:order_master_kds/models/staff_model.dart';
-import 'package:order_master_kds/providers/kds_backend_providers.dart';
+import 'package:order_master_kds/providers/providers.dart';
 import 'package:order_master_kds/services/kds_api_service.dart';
 import 'package:order_master_kds/services/kds_http_client.dart';
 
@@ -342,6 +343,45 @@ void main() {
       );
     });
 
+    test('replaceOrder skips a lower version snapshot', () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order cooking = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.cooking);
+
+      controller.replaceOrder(
+        cooking.copyWith(version: cooking.version + 2, note: 'newer'),
+      );
+      controller.replaceOrder(
+        cooking.copyWith(version: cooking.version + 1, note: 'stale'),
+      );
+
+      final Order afterStale = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.id == cooking.id);
+      expect(afterStale.note, 'newer');
+      expect(afterStale.version, cooking.version + 2);
+
+      controller.replaceOrder(
+        cooking.copyWith(version: cooking.version + 3, note: 'newest'),
+      );
+      expect(
+        container
+            .read(orderControllerProvider)
+            .requireValue
+            .firstWhere((Order o) => o.id == cooking.id)
+            .note,
+        'newest',
+      );
+    });
+
     test('startOrder in offline/mock mode emits no events', () async {
       final ProviderContainer container = ProviderContainer();
       addTearDown(container.dispose);
@@ -440,6 +480,196 @@ void main() {
       );
     });
   });
+
+  test('clearStationOrders empties the board without events or cursor change',
+      () async {
+    final ProviderContainer container = ProviderContainer();
+    addTearDown(container.dispose);
+    await container.read(orderControllerProvider.future);
+    final OrderController controller = container.read(
+      orderControllerProvider.notifier,
+    );
+    controller.updateSyncCursor('cursor_keep');
+    expect(container.read(orderControllerProvider).requireValue, isNotEmpty);
+    expect(
+      container.read(productPrepBreakdownProvider('p-salmon-grill')),
+      isNotEmpty,
+    );
+
+    final List<KdsOrderEvent> events = <KdsOrderEvent>[];
+    final ProviderSubscription<AsyncValue<KdsOrderEvent>> subscription =
+        container.listen<AsyncValue<KdsOrderEvent>>(
+      orderEventsProvider,
+      (AsyncValue<KdsOrderEvent>? previous, AsyncValue<KdsOrderEvent> next) {
+        next.whenData(events.add);
+      },
+    );
+
+    controller.clearStationOrders();
+    await pumpEventQueue();
+    subscription.close();
+
+    expect(container.read(orderControllerProvider).requireValue, isEmpty);
+    expect(controller.syncCursor, 'cursor_keep');
+    expect(events, isEmpty);
+    expect(container.read(ordersForCurrentViewProvider), isEmpty);
+    expect(container.read(productQuantitiesProvider), isEmpty);
+    expect(
+      container.read(productPrepBreakdownProvider('p-salmon-grill')),
+      isEmpty,
+    );
+
+    final PackedOrderBoard packed = packOrderColumns(
+      orders: container.read(ordersForCurrentViewProvider),
+      boardWidth: 1280,
+      boardHeight: 800,
+    );
+    expect(
+      packed.columns.every((List<CardSegment> column) => column.isEmpty),
+      isTrue,
+    );
+  });
+
+  group('stale leftover orders', () {
+    test('markCurrentOrdersStale snapshots existing ids only', () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final List<String> existing = container
+          .read(orderControllerProvider)
+          .requireValue
+          .map((Order o) => o.id)
+          .toList();
+
+      controller.markCurrentOrdersStale();
+
+      for (final String id in existing) {
+        expect(controller.isStaleLeftover(id), isTrue);
+      }
+
+      final Order template = container
+          .read(orderControllerProvider)
+          .requireValue
+          .first;
+      final Order incoming = template.copyWith(
+        id: 'ord_new_day:station-1',
+        displayNumber: 'N1',
+        status: OrderStatus.newOrder,
+      );
+      controller.replaceOrder(incoming);
+
+      expect(controller.isStaleLeftover(incoming.id), isFalse);
+      for (final String id in existing) {
+        expect(controller.isStaleLeftover(id), isTrue);
+      }
+    });
+
+    test('dismissStaleOrder removes one leftover and ignores live ids',
+        () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      controller.markCurrentOrdersStale();
+      final List<Order> before = container
+          .read(orderControllerProvider)
+          .requireValue;
+      final String staleId = before.first.id;
+      final int count = before.length;
+
+      controller.dismissStaleOrder(staleId);
+
+      final List<Order> after = container
+          .read(orderControllerProvider)
+          .requireValue;
+      expect(after, hasLength(count - 1));
+      expect(after.any((Order o) => o.id == staleId), isFalse);
+      expect(controller.isStaleLeftover(staleId), isFalse);
+
+      final Order live = after.first.copyWith(
+        id: 'ord_live:station-1',
+        displayNumber: 'L1',
+      );
+      controller.replaceOrder(live);
+      controller.dismissStaleOrder(live.id);
+      expect(
+        container
+            .read(orderControllerProvider)
+            .requireValue
+            .any((Order o) => o.id == live.id),
+        isTrue,
+      );
+    });
+
+    test('clearStationOrders and refresh clear the stale set', () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final String id = container
+          .read(orderControllerProvider)
+          .requireValue
+          .first
+          .id;
+      controller.markCurrentOrdersStale();
+      expect(controller.isStaleLeftover(id), isTrue);
+
+      controller.clearStationOrders();
+      expect(controller.isStaleLeftover(id), isFalse);
+
+      await controller.refresh();
+      final String reloaded = container
+          .read(orderControllerProvider)
+          .requireValue
+          .first
+          .id;
+      controller.markCurrentOrdersStale();
+      expect(controller.isStaleLeftover(reloaded), isTrue);
+      await controller.refresh();
+      expect(controller.isStaleLeftover(reloaded), isFalse);
+    });
+
+    test('completeOrder does not call the API for stale leftovers', () async {
+      final _RecordingCompleteApi api = _RecordingCompleteApi();
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          authControllerProvider.overrideWith(
+            _AuthenticatedAuthController.new,
+          ),
+          kdsApiServiceProvider.overrideWith((Ref ref) => api),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order cooking = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.cooking);
+
+      controller.markCurrentOrdersStale();
+      await controller.completeOrder(cooking.id);
+
+      expect(api.completeCalls, 0);
+      expect(
+        container
+            .read(orderControllerProvider)
+            .requireValue
+            .firstWhere((Order o) => o.id == cooking.id)
+            .status,
+        OrderStatus.cooking,
+      );
+    });
+  });
 }
 
 class _AuthenticatedAuthController extends AuthController {
@@ -456,6 +686,28 @@ class _AuthenticatedAuthController extends AuthController {
         restaurant: const Restaurant(id: 'rest_001', name: 'Test'),
         outlet: const Outlet(id: '1', name: 'Main'),
       ),
+    );
+  }
+}
+
+class _RecordingCompleteApi extends KdsApiService {
+  _RecordingCompleteApi() : super(useMockBackend: true);
+
+  int completeCalls = 0;
+
+  @override
+  Future<OrderActionResult> completeOrder({
+    required AuthSession session,
+    required String deviceId,
+    required Order order,
+    required String idempotencyKey,
+  }) async {
+    completeCalls++;
+    return super.completeOrder(
+      session: session,
+      deviceId: deviceId,
+      order: order,
+      idempotencyKey: idempotencyKey,
     );
   }
 }

@@ -19,6 +19,7 @@ class KdsOrderEvent {
     required this.kind,
     required this.orderId,
     required this.displayNumber,
+    this.kotNumber,
     required this.stationId,
     required this.type,
     this.tableNumber,
@@ -33,6 +34,7 @@ class KdsOrderEvent {
   final KdsOrderEventKind kind;
   final String orderId;
   final String displayNumber;
+  final String? kotNumber;
   final String stationId;
   final OrderType type;
   final String? tableNumber;
@@ -49,6 +51,7 @@ class KdsOrderEvent {
         other.kind == kind &&
         other.orderId == orderId &&
         other.displayNumber == displayNumber &&
+        other.kotNumber == kotNumber &&
         other.stationId == stationId &&
         other.type == type &&
         other.tableNumber == tableNumber &&
@@ -65,6 +68,7 @@ class KdsOrderEvent {
         kind,
         orderId,
         displayNumber,
+        kotNumber,
         stationId,
         type,
         tableNumber,

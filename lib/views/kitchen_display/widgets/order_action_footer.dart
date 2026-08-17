@@ -13,6 +13,8 @@ class OrderActionFooter extends StatelessWidget {
     required this.onStart,
     required this.onComplete,
     required this.onRollback,
+    required this.onClear,
+    this.staleLeftover = false,
   });
 
   final OrderStatus status;
@@ -20,81 +22,74 @@ class OrderActionFooter extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback onComplete;
   final VoidCallback onRollback;
+  final VoidCallback onClear;
+  final bool staleLeftover;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: AppSpacing.touchTargetMin,
       width: double.infinity,
-      child: switch (status) {
-        OrderStatus.newOrder => OutlinedButton(
-          onPressed: onStart,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: accentColor,
-            side: BorderSide(color: accentColor, width: 2),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadii.defaultRadius),
-            ),
-          ),
-          child: const Text(
-            'Start',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
+      child: staleLeftover
+          ? _outlined(
+              label: 'Clear',
+              foreground: Theme.of(context).colorScheme.onSurface,
+              border: Theme.of(context).colorScheme.outline,
+              onPressed: onClear,
+            )
+          : switch (status) {
+              OrderStatus.newOrder => _outlined(
+                label: 'Start',
+                foreground: accentColor,
+                border: accentColor,
+                onPressed: onStart,
+              ),
+              // Cooking keeps a same-height actionable Complete control so tickets
+              // stay visible after Start until manually completed.
+              OrderStatus.cooking => _outlined(
+                label: 'Complete',
+                foreground: accentColor,
+                border: accentColor,
+                onPressed: onComplete,
+              ),
+              // Durable recovery for accidental Complete — neutral outline, not critical red.
+              OrderStatus.completed => _outlined(
+                label: 'Roll back',
+                foreground: AppColors.statusCompleted,
+                border: AppColors.statusCompleted,
+                onPressed: onRollback,
+              ),
+              // Cancelled: no Start/Complete (§4a). Same reserved height as other states.
+              OrderStatus.cancelled => _outlined(
+                label: 'Cancelled',
+                foreground: AppColors.statusCancelled,
+                border: AppColors.statusCancelled,
+                onPressed: null,
+              ),
+            },
+    );
+  }
+
+  Widget _outlined({
+    required String label,
+    required Color foreground,
+    required Color border,
+    required VoidCallback? onPressed,
+  }) {
+    return OutlinedButton(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: foreground,
+        disabledForegroundColor: foreground,
+        side: BorderSide(color: border, width: 2),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.defaultRadius),
         ),
-        // Cooking keeps a same-height actionable Complete control so tickets
-        // stay visible after Start until manually completed.
-        OrderStatus.cooking => OutlinedButton(
-          onPressed: onComplete,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: accentColor,
-            side: BorderSide(color: accentColor, width: 2),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadii.defaultRadius),
-            ),
-          ),
-          child: const Text(
-            'Complete',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ),
-        // Durable recovery for accidental Complete — neutral outline, not critical red.
-        OrderStatus.completed => OutlinedButton(
-          onPressed: onRollback,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.statusCompleted,
-            side: const BorderSide(
-              color: AppColors.statusCompleted,
-              width: 2,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadii.defaultRadius),
-            ),
-          ),
-          child: const Text(
-            'Roll back',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ),
-        // Cancelled: no Start/Complete (§4a). Same reserved height as other states.
-        OrderStatus.cancelled => OutlinedButton(
-          onPressed: null,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.statusCancelled,
-            disabledForegroundColor: AppColors.statusCancelled,
-            side: const BorderSide(
-              color: AppColors.statusCancelled,
-              width: 2,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadii.defaultRadius),
-            ),
-          ),
-          child: const Text(
-            'Cancelled',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ),
-      },
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
     );
   }
 }

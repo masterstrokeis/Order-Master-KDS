@@ -7,6 +7,7 @@ import '../controllers/urgency_settings_controller.dart';
 import '../core/constants/kds_timing.dart';
 import '../core/utils/cancelled_cooking_visibility.dart';
 import '../core/utils/order_column_packer.dart';
+import '../core/utils/order_title_number.dart';
 import '../core/utils/order_urgency.dart';
 import '../models/order_item_model.dart';
 import '../models/order_model.dart';
@@ -18,12 +19,14 @@ import '../services/product_quantity_list_preference_service.dart';
 import '../services/theme_preference_service.dart';
 import '../views/kitchen_display/prep_line.dart';
 import 'kds_backend_providers.dart';
+import 'order_title_number_providers.dart';
 
 export '../controllers/order_controller.dart'
     show
         orderControllerProvider,
         orderEventsControllerProvider,
-        orderEventsProvider;
+        orderEventsProvider,
+        staleLeftoverOrderIdsProvider;
 export '../controllers/urgency_settings_controller.dart'
     show urgencySettingsProvider, urgencySettingsServiceProvider;
 export '../controllers/voice_announcement_controller.dart'
@@ -37,6 +40,7 @@ export '../controllers/voice_announcement_controller.dart'
         voiceAnnouncementProvider;
 export '../services/cancelled_display_preference_service.dart';
 export 'kds_backend_providers.dart';
+export 'order_title_number_providers.dart';
 export 'server_config_providers.dart';
 
 enum KdsTab { cooking, completed, cancelled }
@@ -251,14 +255,15 @@ final productPrepBreakdownProvider = Provider.family<List<PrepLine>, String>((
               : a.sourceIndex.compareTo(b.sourceIndex);
         });
 
+  final OrderTitleNumberSource titleNumberSource = ref.watch(
+    orderTitleNumberSourceProvider,
+  );
   final List<PrepLine> lines = <PrepLine>[];
   for (final ({int sourceIndex, Order order}) entry in activeOrders) {
     final Order order = entry.order;
-    final String serviceLabel = switch (order.type) {
-      OrderType.dineIn => 'Table - ${order.tableNumber ?? '--'}',
-      OrderType.delivery => 'Delivery',
-      OrderType.takeOut => 'Take-Out',
-    };
+    final String serviceLabel = order.type.serviceLabel(
+      tableNumber: order.tableNumber,
+    );
 
     for (final OrderItem item in order.items) {
       if (item.productId != productId) {
@@ -267,7 +272,7 @@ final productPrepBreakdownProvider = Provider.family<List<PrepLine>, String>((
       lines.add(
         PrepLine(
           orderId: order.id,
-          displayNumber: order.displayNumber,
+          displayNumber: orderTitleNumber(order, titleNumberSource),
           orderType: order.type,
           serviceLabel: serviceLabel,
           customerName: order.customerName,

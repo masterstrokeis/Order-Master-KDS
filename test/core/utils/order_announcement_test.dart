@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:order_master_kds/core/utils/order_announcement.dart';
+import 'package:order_master_kds/core/utils/order_title_number.dart';
 import 'package:order_master_kds/models/kds_order_event.dart';
 import 'package:order_master_kds/models/order_model.dart';
 
@@ -7,6 +8,7 @@ KdsOrderEvent _event({
   required KdsOrderEventKind kind,
   String orderId = 'ord_2:station_grill',
   String displayNumber = '2',
+  String? kotNumber,
   String? tableNumber = '3',
   String? itemName = 'Orange juice',
   int? oldQuantity,
@@ -19,6 +21,7 @@ KdsOrderEvent _event({
     kind: kind,
     orderId: orderId,
     displayNumber: displayNumber,
+    kotNumber: kotNumber,
     stationId: 'station_grill',
     type: type,
     tableNumber: tableNumber,
@@ -35,6 +38,7 @@ void main() {
     expect(spokenOrderType(OrderType.dineIn), 'Dine-in');
     expect(spokenOrderType(OrderType.takeOut), 'Takeaway');
     expect(spokenOrderType(OrderType.delivery), 'Delivery');
+    expect(spokenOrderType(OrderType.parse('BUFFET')), 'BUFFET');
   });
 
   test('newOrder uses type and display number, without table', () {
@@ -55,6 +59,23 @@ void main() {
       'Delivery order 2, new order.',
     );
     expect(announcementFor(_event(kind: KdsOrderEventKind.newOrder)), isNot(contains('table')));
+  });
+
+  test('newOrder speaks kot number when KOT source is selected', () {
+    expect(
+      announcementFor(
+        _event(kind: KdsOrderEventKind.newOrder, kotNumber: '12'),
+        titleNumberSource: OrderTitleNumberSource.kotNumber,
+      ),
+      'Dine-in order 12, new order.',
+    );
+    expect(
+      announcementFor(
+        _event(kind: KdsOrderEventKind.newOrder),
+        titleNumberSource: OrderTitleNumberSource.kotNumber,
+      ),
+      'Dine-in order 2, new order.',
+    );
   });
 
   test('cancelled uses type and display number, without table', () {

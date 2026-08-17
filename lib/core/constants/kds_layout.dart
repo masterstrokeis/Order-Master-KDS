@@ -42,6 +42,9 @@ abstract final class KdsLayout {
   static const double noteLineHeight = 24;
   static const double secondaryTextTopPadding = 4;
 
+  /// Order-note band `EdgeInsets.all(12)` top + bottom.
+  static const double orderNoteBandVerticalPadding = 24;
+
   /// Prefer early split / next column over clipping; covers font/platform drift.
   static const double heightSafetyAllowance = 40;
 
