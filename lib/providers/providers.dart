@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../controllers/order_controller.dart';
 import '../controllers/urgency_settings_controller.dart';
 import '../core/constants/kds_timing.dart';
+import '../core/utils/board_ticket_order.dart';
 import '../core/utils/cancelled_cooking_visibility.dart';
 import '../core/utils/order_column_packer.dart';
 import '../core/utils/order_title_number.dart';
@@ -18,6 +19,7 @@ import '../services/cancelled_display_preference_service.dart';
 import '../services/product_quantity_list_preference_service.dart';
 import '../services/theme_preference_service.dart';
 import '../views/kitchen_display/prep_line.dart';
+import 'board_ticket_order_providers.dart';
 import 'kds_backend_providers.dart';
 import 'order_title_number_providers.dart';
 
@@ -39,6 +41,7 @@ export '../controllers/voice_announcement_controller.dart'
         orderUpdatePulseUntilProvider,
         voiceAnnouncementProvider;
 export '../services/cancelled_display_preference_service.dart';
+export 'board_ticket_order_providers.dart';
 export 'kds_backend_providers.dart';
 export 'order_title_number_providers.dart';
 export 'server_config_providers.dart';
@@ -249,11 +252,19 @@ final packedOrderBoardProvider =
     ) {
       // Fingerprint ignores isCompleted so item-done toggles do not repack.
       ref.watch(ordersForCurrentViewProvider.select(_packingFingerprint));
+      final BoardTicketOrder ticketOrder = ref.watch(boardTicketOrderProvider);
+      final KdsTab tab = ref.watch(selectedKdsTabProvider);
       final List<Order> orders = ref.read(ordersForCurrentViewProvider);
       return packOrderColumns(
         orders: orders,
         boardWidth: constraints.boardWidth,
         boardHeight: constraints.boardHeight,
+        newestFirst: ticketOrder == BoardTicketOrder.newestFirst,
+        sortTime: (Order order) => switch (tab) {
+          KdsTab.cooking => order.createdAt,
+          KdsTab.completed => order.completedAt ?? order.updatedAt,
+          KdsTab.cancelled => order.cancelledAt ?? order.updatedAt,
+        },
       );
     });
 
@@ -265,6 +276,8 @@ int _packingFingerprint(List<Order> orders) {
         order.displayNumber,
         order.stationId,
         order.createdAt,
+        order.completedAt,
+        order.cancelledAt,
         order.type,
         order.status,
         order.tableNumber,

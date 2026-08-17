@@ -200,9 +200,17 @@ PackedOrderBoard packOrderColumns({
   required List<Order> orders,
   required double boardWidth,
   required double boardHeight,
+  DateTime Function(Order order)? sortTime,
+  bool newestFirst = false,
 }) {
+  final DateTime Function(Order order) timeOf =
+      sortTime ?? (Order order) => order.createdAt;
   final List<Order> sorted = List<Order>.of(orders)
-    ..sort((Order a, Order b) => a.createdAt.compareTo(b.createdAt));
+    ..sort((Order a, Order b) {
+      final int byTime = timeOf(a).compareTo(timeOf(b));
+      final int ordered = byTime != 0 ? byTime : a.id.compareTo(b.id);
+      return newestFirst ? -ordered : ordered;
+    });
 
   final int viewportColumnCount = computeColumnCount(boardWidth);
   final double columnWidth = computeColumnWidth(

@@ -7,9 +7,11 @@ import 'app.dart';
 import 'controllers/urgency_settings_controller.dart';
 import 'models/server_config.dart';
 import 'models/urgency_settings.dart';
+import 'core/utils/board_ticket_order.dart';
 import 'core/utils/order_title_number.dart';
 import 'providers/providers.dart';
 import 'services/announcement_preference_service.dart';
+import 'services/board_ticket_order_preference_service.dart';
 import 'services/order_title_number_preference_service.dart';
 import 'services/order_update_pulse_preference_service.dart';
 import 'services/product_quantity_list_preference_service.dart';
@@ -58,6 +60,11 @@ Future<void> main() async {
   final OrderTitleNumberSource initialOrderTitleNumber =
       await orderTitleNumberService.load();
 
+  final BoardTicketOrderPreferenceService boardTicketOrderService =
+      BoardTicketOrderPreferenceService();
+  final BoardTicketOrder initialBoardTicketOrder =
+      await boardTicketOrderService.load();
+
   runApp(
     ProviderScope(
       overrides: [
@@ -70,6 +77,9 @@ Future<void> main() async {
         ),
         orderTitleNumberSourceProvider.overrideWith(
           (Ref ref) => initialOrderTitleNumber,
+        ),
+        boardTicketOrderProvider.overrideWith(
+          (Ref ref) => initialBoardTicketOrder,
         ),
         orderUpdatePulseSecondsProvider.overrideWith(
           (Ref ref) => initialPulseSeconds,

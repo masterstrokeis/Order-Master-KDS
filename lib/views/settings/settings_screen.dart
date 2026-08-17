@@ -9,6 +9,7 @@ import '../../core/theme/app_radii.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/urgency_color_presets.dart';
+import '../../core/utils/board_ticket_order.dart';
 import '../../core/utils/order_announcement.dart';
 import '../../core/utils/order_title_number.dart';
 import '../../models/server_config.dart';
@@ -343,6 +344,8 @@ class _AppearanceSection extends ConsumerWidget {
         const SizedBox(height: AppSpacing.gutter),
         const _OrderTitleNumberPicker(),
         const SizedBox(height: AppSpacing.gutter),
+        const _BoardTicketOrderPicker(),
+        const SizedBox(height: AppSpacing.gutter),
         Row(
           children: [
             Switch.adaptive(
@@ -417,6 +420,52 @@ class _OrderTitleNumberPicker extends ConsumerWidget {
                   await ref
                       .read(orderTitleNumberPreferenceServiceProvider)
                       .save(source);
+                },
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _BoardTicketOrderPicker extends ConsumerWidget {
+  const _BoardTicketOrderPicker();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    final BoardTicketOrder selected = ref.watch(boardTicketOrderProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Ticket order',
+          style: AppTextStyles.bodyMd.copyWith(color: colorScheme.onSurface),
+        ),
+        const SizedBox(height: AppSpacing.unit),
+        Wrap(
+          spacing: AppSpacing.unit,
+          runSpacing: AppSpacing.unit,
+          children: [
+            for (final BoardTicketOrder order in BoardTicketOrder.values)
+              ChoiceChip(
+                key: Key('board-ticket-order-${order.name}'),
+                label: Text(
+                  order == BoardTicketOrder.oldestFirst
+                      ? 'Oldest first'
+                      : 'Newest first',
+                ),
+                selected: selected == order,
+                onSelected: (bool isSelected) async {
+                  if (!isSelected) {
+                    return;
+                  }
+                  ref.read(boardTicketOrderProvider.notifier).state = order;
+                  await ref
+                      .read(boardTicketOrderPreferenceServiceProvider)
+                      .save(order);
                 },
               ),
           ],

@@ -26,6 +26,7 @@ Order _order({
   required String id,
   required List<OrderItem> items,
   DateTime? createdAt,
+  DateTime? completedAt,
   String? note,
 }) {
   return Order(
@@ -33,6 +34,7 @@ Order _order({
     displayNumber: id,
     stationId: 'station-1',
     createdAt: createdAt ?? DateTime(2026, 1, 1, 12),
+    completedAt: completedAt,
     type: OrderType.dineIn,
     status: OrderStatus.newOrder,
     tableNumber: '05',
@@ -424,5 +426,75 @@ void main() {
       4,
     );
     expect(computeColumnCount(5000), KdsLayout.maxColumns);
+  });
+
+  test('oldest first packs earlier createdAt at the top-left', () {
+    final PackedOrderBoard board = packOrderColumns(
+      orders: <Order>[
+        _order(
+          id: 'newer',
+          createdAt: DateTime(2026, 1, 1, 13),
+          items: <OrderItem>[_item(id: 'n', name: 'Soup')],
+        ),
+        _order(
+          id: 'older',
+          createdAt: DateTime(2026, 1, 1, 11),
+          items: <OrderItem>[_item(id: 'o', name: 'Soup')],
+        ),
+      ],
+      boardWidth: 1200,
+      boardHeight: 900,
+    );
+
+    expect(board.columns.first.first.orderId, 'older');
+    expect(board.columns.first[1].orderId, 'newer');
+  });
+
+  test('newest first packs later createdAt at the top-left', () {
+    final PackedOrderBoard board = packOrderColumns(
+      orders: <Order>[
+        _order(
+          id: 'older',
+          createdAt: DateTime(2026, 1, 1, 11),
+          items: <OrderItem>[_item(id: 'o', name: 'Soup')],
+        ),
+        _order(
+          id: 'newer',
+          createdAt: DateTime(2026, 1, 1, 13),
+          items: <OrderItem>[_item(id: 'n', name: 'Soup')],
+        ),
+      ],
+      boardWidth: 1200,
+      boardHeight: 900,
+      newestFirst: true,
+    );
+
+    expect(board.columns.first.first.orderId, 'newer');
+    expect(board.columns.first[1].orderId, 'older');
+  });
+
+  test('custom sortTime packs by completedAt', () {
+    final PackedOrderBoard board = packOrderColumns(
+      orders: <Order>[
+        _order(
+          id: 'finished-late',
+          createdAt: DateTime(2026, 1, 1, 10),
+          completedAt: DateTime(2026, 1, 1, 14),
+          items: <OrderItem>[_item(id: 'a', name: 'Soup')],
+        ),
+        _order(
+          id: 'finished-early',
+          createdAt: DateTime(2026, 1, 1, 12),
+          completedAt: DateTime(2026, 1, 1, 13),
+          items: <OrderItem>[_item(id: 'b', name: 'Soup')],
+        ),
+      ],
+      boardWidth: 1200,
+      boardHeight: 900,
+      sortTime: (Order order) => order.completedAt ?? order.updatedAt,
+    );
+
+    expect(board.columns.first.first.orderId, 'finished-early');
+    expect(board.columns.first[1].orderId, 'finished-late');
   });
 }
