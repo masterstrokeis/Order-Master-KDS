@@ -6,6 +6,8 @@ import '../../controllers/order_controller.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../providers/kds_backend_providers.dart';
 import '../kitchen_display/kitchen_display_screen.dart';
+import '../server_setup/server_setup_screen.dart';
+import 'widgets/login_connectivity_dialog.dart';
 import 'widgets/login_form_card.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -22,6 +24,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(authControllerProvider.notifier).restoreSession();
     });
+  }
+
+  void _openServerSetup() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const ServerSetupScreen(fromSettings: true),
+      ),
+    );
+  }
+
+  Future<void> _showConnectivityDialog() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return LoginConnectivityDialog(
+          onDismiss: () => Navigator.of(dialogContext).pop(),
+          onChangeServer: () {
+            Navigator.of(dialogContext).pop();
+            _openServerSetup();
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -42,6 +68,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             builder: (BuildContext context) => const KitchenDisplayScreen(),
           ),
         );
+        return;
+      }
+
+      if (next.status == AuthStatus.error &&
+          next.isConnectivityFailure &&
+          !(previous?.isConnectivityFailure ?? false)) {
+        if (!context.mounted) {
+          return;
+        }
+        await _showConnectivityDialog();
       }
     });
 
@@ -72,7 +108,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         onClear: authController.clearPin,
                         onBackspace: authController.backspace,
                         onSubmit: authController.submit,
-                        onTechnicalSupport: () {},
+                        onServerSetup: _openServerSetup,
                       ),
                     ),
                   ),

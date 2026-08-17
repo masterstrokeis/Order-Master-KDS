@@ -25,4 +25,10 @@ abstract final class KdsConfig {
   );
 
   static const String apiPrefix = '/api/v1/kds';
+
+  /// App-level deadline for LAN REST requests (and connection checks).
+  ///
+  /// Matches the WebSocket connect timeout so hung TCP connects fail in
+  /// seconds instead of waiting on the OS default (often minutes).
+  static const Duration requestTimeout = Duration(seconds: 8);
 }

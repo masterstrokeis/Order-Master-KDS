@@ -18,7 +18,7 @@ class LoginFormCard extends StatelessWidget {
     required this.onClear,
     required this.onBackspace,
     required this.onSubmit,
-    required this.onTechnicalSupport,
+    required this.onServerSetup,
   });
 
   final int pinLength;
@@ -28,7 +28,7 @@ class LoginFormCard extends StatelessWidget {
   final VoidCallback onClear;
   final VoidCallback onBackspace;
   final VoidCallback onSubmit;
-  final VoidCallback onTechnicalSupport;
+  final VoidCallback onServerSetup;
 
   @override
   Widget build(BuildContext context) {
@@ -104,28 +104,21 @@ class LoginFormCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(height: AppSpacing.unit),
+                  Align(
+                    alignment: Alignment.center,
+                    child: IconButton(
+                      key: const Key('login-server-setup'),
+                      onPressed: onServerSetup,
+                      tooltip: 'Server settings',
+                      icon: const Icon(
+                        Icons.dns_outlined,
+                        color: AppColors.onSurfaceVariant,
+                        size: AppSpacing.gutter,
+                      ),
+                    ),
+                  ),
                 ],
-              ),
-            ),
-            Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceContainerLowest,
-                border: Border(
-                  top: BorderSide(color: AppColors.outlineVariant),
-                ),
-              ),
-              child: TextButton.icon(
-                onPressed: onTechnicalSupport,
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.onSurfaceVariant,
-                  minimumSize: const Size.fromHeight(AppSpacing.touchTargetMin),
-                ),
-                icon: const Icon(Icons.help_outline, size: AppSpacing.gutter),
-                label: Text(
-                  'Technical Support',
-                  style: AppTextStyles.labelCaps,
-                ),
               ),
             ),
           ],

@@ -19,12 +19,12 @@ class LoginHeader extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'La Botica',
+            'Order Master KDS',
             style: AppTextStyles.headlineMd.copyWith(color: AppColors.primary),
           ),
           const SizedBox(height: AppSpacing.unit),
           Text(
-            'Kitchen Display System 2.4',
+            'Kitchen Display System v1',
             style: AppTextStyles.labelCaps.copyWith(
               color: AppColors.onSurfaceVariant,
             ),

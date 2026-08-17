@@ -35,7 +35,9 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
   late final TextEditingController _ipController;
   late final TextEditingController _portController;
   bool _saving = false;
+  bool _testing = false;
   String? _error;
+  String? _statusMessage;
 
   @override
   void initState() {
@@ -67,6 +69,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
         outcome.port == null) {
       setState(() {
         _error = 'QR code is missing ip_address and port_number.';
+        _statusMessage = null;
       });
       return;
     }
@@ -74,11 +77,12 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
       _ipController.text = outcome.ipAddress!;
       _portController.text = outcome.port!;
       _error = null;
+      _statusMessage = null;
     });
   }
 
-  Future<void> _save() async {
-    if (_saving) {
+  Future<void> _testConnection() async {
+    if (_saving || _testing) {
       return;
     }
     final String ip = _ipController.text.trim();
@@ -88,13 +92,60 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
       port: port,
     );
     if (validation != null) {
-      setState(() => _error = validation);
+      setState(() {
+        _error = validation;
+        _statusMessage = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _testing = true;
+      _error = null;
+      _statusMessage = null;
+    });
+
+    final ServerConfig config = ServerConfig(ipAddress: ip, port: port);
+    final ConnectionCheckResult check = await widget.checkConnection(
+      config.baseUrl,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _testing = false;
+      if (check.ok) {
+        _statusMessage = 'Connected';
+        _error = null;
+      } else {
+        _statusMessage = null;
+        _error = check.errorMessage ?? 'Could not reach the server.';
+      }
+    });
+  }
+
+  Future<void> _save() async {
+    if (_saving || _testing) {
+      return;
+    }
+    final String ip = _ipController.text.trim();
+    final String port = _portController.text.trim();
+    final String? validation = validateServerAddress(
+      ipAddress: ip,
+      port: port,
+    );
+    if (validation != null) {
+      setState(() {
+        _error = validation;
+        _statusMessage = null;
+      });
       return;
     }
 
     setState(() {
       _saving = true;
       _error = null;
+      _statusMessage = null;
     });
 
     final ServerConfig config = ServerConfig(ipAddress: ip, port: port);
@@ -136,6 +187,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool busy = _saving || _testing;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: widget.fromSettings
@@ -181,7 +233,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                     key: const Key('server-ip-field'),
                     controller: _ipController,
                     keyboardType: TextInputType.number,
-                    enabled: !_saving,
+                    enabled: !busy,
                     decoration: const InputDecoration(
                       labelText: 'IP address',
                       hintText: '192.168.1.100',
@@ -192,7 +244,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                     key: const Key('server-port-field'),
                     controller: _portController,
                     keyboardType: TextInputType.number,
-                    enabled: !_saving,
+                    enabled: !busy,
                     decoration: const InputDecoration(
                       labelText: 'Port',
                       hintText: '8000',
@@ -201,6 +253,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                   if (_error != null) ...[
                     const SizedBox(height: AppSpacing.gutter),
                     Text(
+                      key: const Key('server-error-text'),
                       _error!,
                       textAlign: TextAlign.center,
                       style: AppTextStyles.bodyMd.copyWith(
@@ -208,19 +261,39 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                       ),
                     ),
                   ],
+                  if (_statusMessage != null) ...[
+                    const SizedBox(height: AppSpacing.gutter),
+                    Text(
+                      key: const Key('server-status-text'),
+                      _statusMessage!,
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.bodyMd.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.pageMargin),
+                  SizedBox(
+                    height: AppSpacing.touchTargetMin,
+                    child: OutlinedButton(
+                      key: const Key('server-test-button'),
+                      onPressed: busy ? null : _testConnection,
+                      child: Text(_testing ? 'Testing…' : 'Test connection'),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.gutter),
                   SizedBox(
                     height: AppSpacing.touchTargetMin,
                     child: ElevatedButton(
                       key: const Key('server-save-button'),
-                      onPressed: _saving ? null : _save,
+                      onPressed: busy ? null : _save,
                       child: Text(_saving ? 'Checking…' : 'Save'),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.gutter),
                   OutlinedButton.icon(
                     key: const Key('server-qr-button'),
-                    onPressed: _saving ? null : _scanQr,
+                    onPressed: busy ? null : _scanQr,
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(
                         AppSpacing.touchTargetMin,

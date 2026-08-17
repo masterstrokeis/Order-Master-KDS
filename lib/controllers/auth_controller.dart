@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/auth_session.dart';
 import '../models/kds_api_error.dart';
+import '../models/kds_connection_failure.dart';
 import '../providers/server_config_providers.dart';
 import '../services/auth_service.dart';
 import '../services/device_identity_service.dart';
@@ -18,6 +19,7 @@ class AuthState {
     this.errorMessage,
     this.session,
     this.deviceId,
+    this.isConnectivityFailure = false,
   });
 
   final AuthStatus status;
@@ -25,6 +27,9 @@ class AuthState {
   final String? errorMessage;
   final AuthSession? session;
   final String? deviceId;
+
+  /// True when login failed because the server was unreachable / timed out.
+  final bool isConnectivityFailure;
 
   /// Display name from the authenticated staff session.
   String? get selectedStaffName => session?.staff.name;
@@ -34,6 +39,8 @@ class AuthController extends Notifier<AuthState> {
   static const int requiredPinLength = PinIndicator.pinLength;
   static const String sessionExpiredMessage =
       'Session expired, please sign in again.';
+  static const String connectivityFailureMessage =
+      'Unable to sign in. Check connection and try again.';
 
   AuthService get _authService => ref.read(authServiceProvider);
   DeviceIdentityService get _deviceIdentity =>
@@ -163,16 +170,20 @@ class AuthController extends Notifier<AuthState> {
         deviceId: state.deviceId,
         errorMessage: _messageFor(error),
       );
-    } catch (error, stackTrace) {
-      // TEMP DIAGNOSTIC — remove after macOS login issue is resolved
-      // ignore: avoid_print
-      print('LOGIN ERROR (raw): $error');
-      print('LOGIN ERROR (stack): $stackTrace');
+    } on KdsConnectionFailure {
       state = AuthState(
         status: AuthStatus.error,
         pin: state.pin,
         deviceId: state.deviceId,
-        errorMessage: 'Unable to sign in. Check connection and try again.',
+        errorMessage: connectivityFailureMessage,
+        isConnectivityFailure: true,
+      );
+    } catch (_) {
+      state = AuthState(
+        status: AuthStatus.error,
+        pin: state.pin,
+        deviceId: state.deviceId,
+        errorMessage: connectivityFailureMessage,
       );
     }
   }

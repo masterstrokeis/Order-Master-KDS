@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:order_master_kds/models/kds_api_error.dart';
+import 'package:order_master_kds/models/kds_connection_failure.dart';
 import 'package:order_master_kds/services/kds_http_client.dart';
 
 void main() {
@@ -127,5 +128,31 @@ void main() {
       throwsA(isA<KdsApiError>()),
     );
     expect(refreshCalls, 0);
+  });
+
+  test('times out with KdsConnectionFailure within the configured window',
+      () async {
+    final MockClient mock = MockClient((http.Request request) async {
+      await Future<void>.delayed(const Duration(seconds: 5));
+      return http.Response('{}', 200);
+    });
+
+    final KdsHttpClient client = KdsHttpClient(
+      client: mock,
+      baseUrl: 'http://192.168.99.99:5012',
+      requestTimeout: const Duration(milliseconds: 50),
+    );
+
+    final Stopwatch watch = Stopwatch()..start();
+    await expectLater(
+      () => client.postJson(
+        '/auth/login',
+        body: <String, dynamic>{'pin': '123', 'deviceId': 'device-1'},
+      ),
+      throwsA(isA<KdsConnectionFailure>()),
+    );
+    watch.stop();
+
+    expect(watch.elapsedMilliseconds, lessThan(2000));
   });
 }

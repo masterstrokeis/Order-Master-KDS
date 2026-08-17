@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:order_master_kds/controllers/auth_controller.dart';
 import 'package:order_master_kds/models/auth_session.dart';
 import 'package:order_master_kds/models/kds_api_error.dart';
+import 'package:order_master_kds/models/kds_connection_failure.dart';
 import 'package:order_master_kds/models/restaurant_model.dart';
 import 'package:order_master_kds/models/server_config.dart';
 import 'package:order_master_kds/models/staff_model.dart';
@@ -11,6 +12,19 @@ import 'package:order_master_kds/services/device_identity_service.dart';
 import 'package:order_master_kds/services/server_config_service.dart';
 import 'package:order_master_kds/services/session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+class _ConnectivityFailingAuthService extends AuthService {
+  _ConnectivityFailingAuthService({required super.sessionStore})
+    : super(useMockBackend: true);
+
+  @override
+  Future<AuthSession> login({
+    required String pin,
+    required String deviceId,
+  }) async {
+    throw const KdsConnectionFailure();
+  }
+}
 
 class _FailingRefreshAuthService extends AuthService {
   _FailingRefreshAuthService({required super.sessionStore})
@@ -136,6 +150,24 @@ void main() {
     final AuthState state = container.read(authControllerProvider);
     expect(state.status, AuthStatus.error);
     expect(state.errorMessage, 'Incorrect PIN. Please try again.');
+    expect(state.isConnectivityFailure, isFalse);
+  });
+
+  test('maps KdsConnectionFailure as a distinct connectivity failure', () async {
+    final SessionStore store = SessionStore();
+    final ProviderContainer container = createContainer(
+      authService: _ConnectivityFailingAuthService(sessionStore: store),
+    );
+    addTearDown(container.dispose);
+    final AuthController controller = container.read(
+      authControllerProvider.notifier,
+    );
+
+    await enterPinAndSubmit(controller, pin: '123');
+    final AuthState state = container.read(authControllerProvider);
+    expect(state.status, AuthStatus.error);
+    expect(state.isConnectivityFailure, isTrue);
+    expect(state.errorMessage, AuthController.connectivityFailureMessage);
   });
 
   test('refreshSession updates access token on success', () async {

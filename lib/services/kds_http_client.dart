@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
@@ -6,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../core/constants/kds_config.dart';
 import '../core/utils/kds_api_logger.dart';
 import '../models/kds_api_error.dart';
+import '../models/kds_connection_failure.dart';
 import '../models/order_model.dart';
 
 /// Called when an authenticated request returns HTTP 401.
@@ -18,14 +21,17 @@ class KdsHttpClient {
     http.Client? client,
     Uuid? uuid,
     String? baseUrl,
+    Duration? requestTimeout,
     this.onUnauthorized,
   }) : _client = client ?? http.Client(),
        _uuid = uuid ?? const Uuid(),
-       _baseUrl = baseUrl ?? KdsConfig.baseUrl;
+       _baseUrl = baseUrl ?? KdsConfig.baseUrl,
+       _requestTimeout = requestTimeout ?? KdsConfig.requestTimeout;
 
   final http.Client _client;
   final Uuid _uuid;
   final String _baseUrl;
+  final Duration _requestTimeout;
 
   String get baseUrl => _baseUrl;
 
@@ -174,6 +180,18 @@ class KdsHttpClient {
     );
   }
 
+  Future<http.Response> _sendTimed(Future<http.Response> future) async {
+    try {
+      return await future.timeout(_requestTimeout);
+    } on TimeoutException {
+      throw const KdsConnectionFailure();
+    } on SocketException {
+      throw const KdsConnectionFailure();
+    } on http.ClientException {
+      throw const KdsConnectionFailure();
+    }
+  }
+
   Future<Map<String, dynamic>> _send({
     required String method,
     required Uri uri,
@@ -184,7 +202,7 @@ class KdsHttpClient {
   }) async {
     KdsApiLogger.request(method: method, uri: uri, body: body);
 
-    http.Response response = await send(accessToken);
+    http.Response response = await _sendTimed(send(accessToken));
     try {
       final Map<String, dynamic> decoded = _decode(response);
       KdsApiLogger.response(statusCode: response.statusCode, body: decoded);
@@ -216,7 +234,7 @@ class KdsHttpClient {
 
       // Single retry with the new access token — no further refresh loops.
       KdsApiLogger.request(method: method, uri: uri, body: body);
-      response = await send(refreshedToken);
+      response = await _sendTimed(send(refreshedToken));
       try {
         final Map<String, dynamic> decoded = _decode(response);
         KdsApiLogger.response(statusCode: response.statusCode, body: decoded);

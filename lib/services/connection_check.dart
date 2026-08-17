@@ -15,7 +15,7 @@ class ConnectionCheckResult {
 Future<ConnectionCheckResult> checkKdsConnection({
   required String baseUrl,
   http.Client? client,
-  Duration timeout = const Duration(seconds: 8),
+  Duration timeout = KdsConfig.requestTimeout,
 }) async {
   final http.Client httpClient = client ?? http.Client();
   final bool ownsClient = client == null;
