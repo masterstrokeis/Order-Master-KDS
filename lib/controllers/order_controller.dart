@@ -7,7 +7,9 @@ import 'package:uuid/uuid.dart';
 import '../core/utils/cancelled_cooking_visibility.dart';
 import '../core/utils/order_event_diff.dart';
 import '../models/auth_session.dart';
+import '../models/complete_items_result.dart';
 import '../models/kds_api_error.dart';
+import '../models/kds_connection_failure.dart';
 import '../models/kds_order_event.dart';
 import '../models/order_item_model.dart';
 import '../models/order_model.dart';
@@ -193,6 +195,86 @@ class OrderController extends AsyncNotifier<List<Order>> {
     } on KdsApiError catch (error) {
       await _handleMutationError(error);
     }
+  }
+
+  /// One-directional batch complete: starts unstarted tickets, then marks
+  /// every target line complete via [toggleItemCompleted]. Continues on
+  /// partial failure and reports outcomes.
+  Future<CompleteItemsResult> completeItems(
+    List<({String orderId, String itemId})> targets,
+  ) async {
+    int completed = 0;
+    int skippedNotStarted = 0;
+    final List<String> failedDisplayNumbers = <String>[];
+
+    for (final ({String orderId, String itemId}) target in targets) {
+      final List<Order>? ordersBefore = state.value;
+      if (ordersBefore == null) {
+        break;
+      }
+
+      Order? order = _find(ordersBefore, target.orderId);
+      if (order == null) {
+        continue;
+      }
+
+      final OrderItem? item = _findItem(order, target.itemId);
+      if (item == null || item.isRemoved || item.isCompleted) {
+        continue;
+      }
+
+      if (isStaleLeftover(target.orderId) ||
+          (order.status != OrderStatus.cooking &&
+              order.status != OrderStatus.newOrder)) {
+        skippedNotStarted++;
+        continue;
+      }
+
+      final String displayNumber = order.displayNumber;
+
+      if (order.status == OrderStatus.newOrder) {
+        try {
+          await startOrder(target.orderId);
+        } on KdsConnectionFailure {
+          failedDisplayNumbers.add(displayNumber);
+          continue;
+        }
+
+        final List<Order>? afterStart = state.value;
+        order = afterStart == null ? null : _find(afterStart, target.orderId);
+        if (order == null || order.status != OrderStatus.cooking) {
+          failedDisplayNumbers.add(displayNumber);
+          continue;
+        }
+      }
+
+      try {
+        await toggleItemCompleted(target.orderId, target.itemId);
+      } on KdsConnectionFailure {
+        failedDisplayNumbers.add(displayNumber);
+        continue;
+      }
+
+      final List<Order>? ordersAfter = state.value;
+      final Order? afterOrder = ordersAfter == null
+          ? null
+          : _find(ordersAfter, target.orderId);
+      final OrderItem? afterItem = afterOrder == null
+          ? null
+          : _findItem(afterOrder, target.itemId);
+
+      if (afterItem?.isCompleted == true) {
+        completed++;
+      } else {
+        failedDisplayNumbers.add(displayNumber);
+      }
+    }
+
+    return CompleteItemsResult(
+      completed: completed,
+      skippedNotStarted: skippedNotStarted,
+      failedDisplayNumbers: failedDisplayNumbers,
+    );
   }
 
   Future<void> acknowledgeRemovedItem(String orderId, String itemId) async {

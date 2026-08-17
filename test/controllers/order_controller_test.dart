@@ -4,6 +4,8 @@ import 'package:order_master_kds/controllers/auth_controller.dart';
 import 'package:order_master_kds/controllers/order_controller.dart';
 import 'package:order_master_kds/core/utils/order_column_packer.dart';
 import 'package:order_master_kds/models/auth_session.dart';
+import 'package:order_master_kds/models/complete_items_result.dart';
+import 'package:order_master_kds/models/item_quantity.dart';
 import 'package:order_master_kds/models/kds_api_error.dart';
 import 'package:order_master_kds/models/kds_order_event.dart';
 import 'package:order_master_kds/models/order_item_model.dart';
@@ -492,7 +494,11 @@ void main() {
     controller.updateSyncCursor('cursor_keep');
     expect(container.read(orderControllerProvider).requireValue, isNotEmpty);
     expect(
-      container.read(productPrepBreakdownProvider('p-salmon-grill')),
+      container.read(
+        itemPrepBreakdownProvider(
+          const ItemGroupKey(name: 'Salmon Grill', modifierText: ''),
+        ),
+      ),
       isNotEmpty,
     );
 
@@ -513,9 +519,13 @@ void main() {
     expect(controller.syncCursor, 'cursor_keep');
     expect(events, isEmpty);
     expect(container.read(ordersForCurrentViewProvider), isEmpty);
-    expect(container.read(productQuantitiesProvider), isEmpty);
+    expect(container.read(itemQuantitiesProvider), isEmpty);
     expect(
-      container.read(productPrepBreakdownProvider('p-salmon-grill')),
+      container.read(
+        itemPrepBreakdownProvider(
+          const ItemGroupKey(name: 'Salmon Grill', modifierText: ''),
+        ),
+      ),
       isEmpty,
     );
 
@@ -670,6 +680,231 @@ void main() {
       );
     });
   });
+
+  group('completeItems', () {
+    test('marks every cooking contributor complete across orders', () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+
+      final Order cooking = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.cooking);
+      final List<({String orderId, String itemId})> targets = cooking.items
+          .where((OrderItem item) => !item.isCompleted && !item.isRemoved)
+          .map(
+            (OrderItem item) => (orderId: cooking.id, itemId: item.id),
+          )
+          .toList();
+
+      final CompleteItemsResult result = await controller.completeItems(targets);
+
+      expect(result.completed, targets.length);
+      expect(result.failed, 0);
+      expect(
+        container
+            .read(orderControllerProvider)
+            .requireValue
+            .firstWhere((Order o) => o.id == cooking.id)
+            .items
+            .every((OrderItem item) => item.isCompleted || item.isRemoved),
+        isTrue,
+      );
+    });
+
+    test('per-item complete leaves other group members incomplete', () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+
+      final Order cooking = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.cooking);
+      final List<OrderItem> pending = cooking.items
+          .where((OrderItem item) => !item.isCompleted && !item.isRemoved)
+          .toList();
+      expect(pending.length, greaterThan(1));
+
+      await controller.toggleItemCompleted(cooking.id, pending.first.id);
+
+      final Order updated = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.id == cooking.id);
+      expect(
+        updated.items.firstWhere((OrderItem i) => i.id == pending.first.id).isCompleted,
+        isTrue,
+      );
+      expect(
+        updated.items.firstWhere((OrderItem i) => i.id == pending[1].id).isCompleted,
+        isFalse,
+      );
+    });
+
+    test('starts a newOrder then marks that item complete', () async {
+      final _RecordingItemPatchApi api = _RecordingItemPatchApi();
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          authControllerProvider.overrideWith(_AuthenticatedAuthController.new),
+          kdsApiServiceProvider.overrideWith((Ref ref) => api),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order newOrder = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.newOrder);
+      final OrderItem item = newOrder.items.first;
+
+      final CompleteItemsResult result = await controller.completeItems(<({
+        String orderId,
+        String itemId
+      })>[
+        (orderId: newOrder.id, itemId: item.id),
+      ]);
+
+      expect(api.startCalls, 1);
+      expect(api.patchCalls, 1);
+      expect(result.completed, 1);
+      expect(result.skippedNotStarted, 0);
+      expect(result.failed, 0);
+
+      final Order updated = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.id == newOrder.id);
+      expect(updated.status, OrderStatus.cooking);
+      expect(
+        updated.items.firstWhere((OrderItem i) => i.id == item.id).isCompleted,
+        isTrue,
+      );
+      expect(
+        updated.items.any(
+          (OrderItem i) => i.id != item.id && !i.isCompleted && !i.isRemoved,
+        ),
+        isTrue,
+      );
+    });
+
+    test('starts an unstarted order once for two items', () async {
+      final _RecordingItemPatchApi api = _RecordingItemPatchApi();
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          authControllerProvider.overrideWith(_AuthenticatedAuthController.new),
+          kdsApiServiceProvider.overrideWith((Ref ref) => api),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order newOrder = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.newOrder);
+      final List<OrderItem> pending = newOrder.items
+          .where((OrderItem item) => !item.isCompleted && !item.isRemoved)
+          .take(2)
+          .toList();
+      expect(pending.length, 2);
+
+      final CompleteItemsResult result = await controller.completeItems(
+        pending
+            .map(
+              (OrderItem item) => (orderId: newOrder.id, itemId: item.id),
+            )
+            .toList(),
+      );
+
+      expect(api.startCalls, 1);
+      expect(api.patchCalls, 2);
+      expect(result.completed, 2);
+      expect(result.failed, 0);
+    });
+
+    test('start failure counts as failed and does not PATCH the item', () async {
+      final _FailStartApi api = _FailStartApi();
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          authControllerProvider.overrideWith(_AuthenticatedAuthController.new),
+          kdsApiServiceProvider.overrideWith((Ref ref) => api),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order newOrder = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.newOrder);
+      final OrderItem item = newOrder.items.first;
+
+      final CompleteItemsResult result = await controller.completeItems(<({
+        String orderId,
+        String itemId
+      })>[
+        (orderId: newOrder.id, itemId: item.id),
+      ]);
+
+      expect(api.startCalls, 1);
+      expect(api.patchCalls, 0);
+      expect(result.completed, 0);
+      expect(result.failed, 1);
+      expect(result.failedDisplayNumbers, contains(newOrder.displayNumber));
+    });
+
+    test('continues batch after VERSION_CONFLICT and reports failure', () async {
+      final _FailFirstItemPatchApi api = _FailFirstItemPatchApi();
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          authControllerProvider.overrideWith(_AuthenticatedAuthController.new),
+          kdsApiServiceProvider.overrideWith((Ref ref) => api),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order cooking = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.cooking);
+      final List<OrderItem> pending = cooking.items
+          .where((OrderItem item) => !item.isCompleted && !item.isRemoved)
+          .toList();
+      expect(pending.length, greaterThanOrEqualTo(2));
+
+      final List<({String orderId, String itemId})> targets = pending
+          .take(2)
+          .map(
+            (OrderItem item) => (orderId: cooking.id, itemId: item.id),
+          )
+          .toList();
+
+      final CompleteItemsResult result = await controller.completeItems(targets);
+
+      expect(api.patchCalls, 2);
+      expect(result.completed, 1);
+      expect(result.failed, 1);
+      expect(result.failedDisplayNumbers, contains(cooking.displayNumber));
+    });
+  });
 }
 
 class _AuthenticatedAuthController extends AuthController {
@@ -729,6 +964,127 @@ class _VersionConflictApi extends KdsApiService {
         status: OrderStatus.cancelled,
         version: order.version + 4,
       ),
+    );
+  }
+}
+
+class _FailStartApi extends KdsApiService {
+  _FailStartApi() : super(useMockBackend: true);
+
+  int startCalls = 0;
+  int patchCalls = 0;
+
+  @override
+  Future<OrderActionResult> startOrder({
+    required AuthSession session,
+    required String deviceId,
+    required Order order,
+    required String idempotencyKey,
+  }) async {
+    startCalls++;
+    throw KdsApiError(
+      code: 'VERSION_CONFLICT',
+      message: 'stale version',
+      order: order.copyWith(
+        status: OrderStatus.cancelled,
+        version: order.version + 4,
+      ),
+    );
+  }
+
+  @override
+  Future<ItemPatchResult> patchItemCompleted({
+    required AuthSession session,
+    required String deviceId,
+    required Order order,
+    required String itemId,
+    required bool isCompleted,
+    required String idempotencyKey,
+  }) async {
+    patchCalls++;
+    return super.patchItemCompleted(
+      session: session,
+      deviceId: deviceId,
+      order: order,
+      itemId: itemId,
+      isCompleted: isCompleted,
+      idempotencyKey: idempotencyKey,
+    );
+  }
+}
+
+class _RecordingItemPatchApi extends KdsApiService {
+  _RecordingItemPatchApi() : super(useMockBackend: true);
+
+  int startCalls = 0;
+  int patchCalls = 0;
+
+  @override
+  Future<OrderActionResult> startOrder({
+    required AuthSession session,
+    required String deviceId,
+    required Order order,
+    required String idempotencyKey,
+  }) async {
+    startCalls++;
+    return super.startOrder(
+      session: session,
+      deviceId: deviceId,
+      order: order,
+      idempotencyKey: idempotencyKey,
+    );
+  }
+
+  @override
+  Future<ItemPatchResult> patchItemCompleted({
+    required AuthSession session,
+    required String deviceId,
+    required Order order,
+    required String itemId,
+    required bool isCompleted,
+    required String idempotencyKey,
+  }) async {
+    patchCalls++;
+    return super.patchItemCompleted(
+      session: session,
+      deviceId: deviceId,
+      order: order,
+      itemId: itemId,
+      isCompleted: isCompleted,
+      idempotencyKey: idempotencyKey,
+    );
+  }
+}
+
+class _FailFirstItemPatchApi extends KdsApiService {
+  _FailFirstItemPatchApi() : super(useMockBackend: true);
+
+  int patchCalls = 0;
+
+  @override
+  Future<ItemPatchResult> patchItemCompleted({
+    required AuthSession session,
+    required String deviceId,
+    required Order order,
+    required String itemId,
+    required bool isCompleted,
+    required String idempotencyKey,
+  }) async {
+    patchCalls++;
+    if (patchCalls == 1) {
+      throw KdsApiError(
+        code: 'VERSION_CONFLICT',
+        message: 'stale version',
+        order: order.copyWith(version: order.version + 1),
+      );
+    }
+    return super.patchItemCompleted(
+      session: session,
+      deviceId: deviceId,
+      order: order,
+      itemId: itemId,
+      isCompleted: isCompleted,
+      idempotencyKey: idempotencyKey,
     );
   }
 }

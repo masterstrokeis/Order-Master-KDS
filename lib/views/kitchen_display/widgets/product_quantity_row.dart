@@ -37,21 +37,26 @@ class ProductQuantityRow extends StatelessWidget {
     super.key,
     required this.name,
     required this.quantity,
+    this.modifierText,
     this.onTap,
   });
 
   final String name;
+  final String? modifierText;
   final int quantity;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final bool isEnabled = quantity > 0 && onTap != null;
+    final String semanticsLabel = modifierText == null || modifierText!.isEmpty
+        ? '$name, quantity $quantity'
+        : '$name, $modifierText, quantity $quantity';
 
     return Semantics(
       button: isEnabled,
       enabled: isEnabled,
-      label: '$name, quantity $quantity',
+      label: semanticsLabel,
       hint: isEnabled ? 'Show contributing orders' : null,
       child: Material(
         color: Colors.transparent,
@@ -66,16 +71,33 @@ class ProductQuantityRow extends StatelessWidget {
               vertical: AppSpacing.unit,
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Text(
-                    name,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: isEnabled
-                          ? AppColors.chromeOnSurface
-                          : AppColors.chromeOnSurfaceDim,
-                      fontSize: 14,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: isEnabled
+                              ? AppColors.chromeOnSurface
+                              : AppColors.chromeOnSurfaceDim,
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (modifierText != null && modifierText!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          modifierText!,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: AppColors.chromeOnSurfaceDim,
+                                fontSize: 12,
+                              ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 QtyBadge(quantity: quantity),

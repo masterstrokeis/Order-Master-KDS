@@ -1,16 +1,53 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:order_master_kds/controllers/order_controller.dart';
-import 'package:order_master_kds/core/constants/kds_layout.dart';
-import 'package:order_master_kds/core/theme/app_spacing.dart';
+import 'package:order_master_kds/models/item_quantity.dart';
 import 'package:order_master_kds/models/order_model.dart';
 import 'package:order_master_kds/providers/providers.dart';
 import 'package:order_master_kds/views/kitchen_display/prep_line.dart';
 import 'package:order_master_kds/views/kitchen_display/widgets/product_prep_breakdown_panel.dart';
 import 'package:order_master_kds/views/kitchen_display/widgets/product_quantity_row.dart';
+import 'package:order_master_kds/views/kitchen_display/widgets/product_sidebar.dart';
+
+const ItemGroupKey _panelKey = ItemGroupKey(
+  name: 'Botica Ceviche',
+  modifierText: '',
+);
+
+List<PrepLine> _samplePrepLines({required bool canComplete}) {
+  return <PrepLine>[
+    PrepLine(
+      orderId: 'order-cooking',
+      itemId: 'item-1',
+      displayNumber: '101',
+      orderType: OrderType.dineIn,
+      serviceLabel: 'Table - 05',
+      quantity: 2,
+      createdAt: DateTime.utc(2026, 1, 1, 12),
+      productName: 'Botica Ceviche',
+      canComplete: canComplete,
+      isCompleted: false,
+    ),
+    PrepLine(
+      orderId: 'order-new',
+      itemId: 'item-2',
+      displayNumber: '102',
+      orderType: OrderType.delivery,
+      serviceLabel: 'Delivery',
+      quantity: 1,
+      createdAt: DateTime.utc(2026, 1, 1, 12, 5),
+      productName: 'Botica Ceviche',
+      modifierText: 'Extra lime',
+      note: 'No onions',
+      canComplete: canComplete,
+      isCompleted: false,
+    ),
+  ];
+}
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   testWidgets('zero-quantity product row is not tappable', (
     WidgetTester tester,
   ) async {
@@ -31,131 +68,159 @@ void main() {
     expect(taps, 0);
   });
 
-  testWidgets('opens token-sized right panel and closes from icon', (
+  testWidgets('sidebar shows ITEMS header', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          itemQuantitiesProvider.overrideWith(
+            (Ref ref) => const <ItemQuantitySection>[],
+          ),
+        ],
+        child: const MaterialApp(home: Scaffold(body: ProductSidebar())),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('ITEMS'), findsOneWidget);
+    expect(find.text('PRODUCT'), findsNothing);
+  });
+
+  testWidgets('panel shows remaining count and complete actions', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
       ProviderScope(
-        child: MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (BuildContext context) {
-                return TextButton(
-                  onPressed: () {
-                    showProductPrepBreakdownPanel(
-                      context: context,
-                      productId: 'p-ceviche',
-                      productName: 'Botica Ceviche',
-                    );
-                  },
-                  child: const Text('Open breakdown'),
-                );
-              },
-            ),
+        overrides: [
+          kdsClockProvider.overrideWith(
+            (Ref ref) => Stream<DateTime>.value(DateTime.utc(2026, 1, 1)),
           ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('Open breakdown'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(ProductPrepBreakdownPanel), findsOneWidget);
-    expect(find.text('Botica Ceviche'), findsWidgets);
-    expect(find.textContaining('pending'), findsOneWidget);
-    expect(
-      tester.getSize(find.byType(ProductPrepBreakdownPanel)).width,
-      KdsLayout.minimumColumnWidth + AppSpacing.pageMargin * 2,
-    );
-
-    await tester.tap(find.byTooltip('Close'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ProductPrepBreakdownPanel), findsNothing);
-  });
-
-  testWidgets('barrier tap dismisses the breakdown', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (BuildContext context) {
-                return TextButton(
-                  onPressed: () {
-                    showProductPrepBreakdownPanel(
-                      context: context,
-                      productId: 'p-ceviche',
-                      productName: 'Botica Ceviche',
-                    );
-                  },
-                  child: const Text('Open breakdown'),
-                );
-              },
-            ),
+          itemPrepBreakdownProvider.overrideWith(
+            (Ref ref, ItemGroupKey key) =>
+                key == _panelKey ? _samplePrepLines(canComplete: true) : const <PrepLine>[],
           ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('Open breakdown'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ProductPrepBreakdownPanel), findsOneWidget);
-
-    await tester.tapAt(
-      const Offset(AppSpacing.unit, AppSpacing.touchTargetMin),
-    );
-    await tester.pumpAndSettle();
-    expect(find.byType(ProductPrepBreakdownPanel), findsNothing);
-  });
-
-  testWidgets('open panel updates to empty from canonical order changes', (
-    WidgetTester tester,
-  ) async {
-    final ProviderContainer container = ProviderContainer();
-    addTearDown(container.dispose);
-    const String productId = 'p-miso-salmon';
-
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
+        ],
         child: const MaterialApp(
           home: Scaffold(
             body: ProductPrepBreakdownPanel(
-              productId: productId,
-              productName: 'Miso Salmon',
+              groupKey: _panelKey,
+              displayTitle: 'Botica Ceviche',
             ),
           ),
         ),
       ),
     );
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.pumpAndSettle();
-
-    final List<PrepLine> before = container.read(
-      productPrepBreakdownProvider(productId),
-    );
-    expect(before, isNotEmpty);
-    expect(find.text('Nothing pending'), findsNothing);
-
-    final OrderController controller = container.read(
-      orderControllerProvider.notifier,
-    );
-    for (final String orderId
-        in before.map((PrepLine line) => line.orderId).toSet()) {
-      final Order order = container
-          .read(orderControllerProvider)
-          .requireValue
-          .firstWhere((Order candidate) => candidate.id == orderId);
-      if (order.status == OrderStatus.newOrder) {
-        await controller.startOrder(orderId);
-      }
-      await controller.completeOrder(orderId);
-    }
     await tester.pump();
 
-    expect(find.text('0 pending'), findsOneWidget);
+    expect(find.text('Botica Ceviche'), findsWidgets);
+    expect(find.text('3 remaining'), findsOneWidget);
+    expect(find.text('Complete all'), findsOneWidget);
+    expect(find.text('Complete'), findsNWidgets(2));
+    expect(find.text('Extra lime'), findsOneWidget);
+    expect(find.textContaining('No onions'), findsOneWidget);
+  });
+
+  testWidgets('panel shows nothing pending when breakdown is empty', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          itemPrepBreakdownProvider.overrideWith(
+            (Ref ref, ItemGroupKey key) => const <PrepLine>[],
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ProductPrepBreakdownPanel(
+              groupKey: _panelKey,
+              displayTitle: 'Botica Ceviche',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('0 remaining'), findsOneWidget);
     expect(find.text('Nothing pending'), findsOneWidget);
+    expect(find.text('Complete all'), findsNothing);
+  });
+
+  testWidgets('complete actions are enabled when tickets are not started', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          itemPrepBreakdownProvider.overrideWith(
+            (Ref ref, ItemGroupKey key) =>
+                key == _panelKey ? _samplePrepLines(canComplete: true) : const <PrepLine>[],
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ProductPrepBreakdownPanel(
+              groupKey: _panelKey,
+              displayTitle: 'Botica Ceviche',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Complete all'), findsOneWidget);
+    expect(find.text('Complete'), findsNWidgets(2));
+
+    final Finder disabledComplete = find.byWidgetPredicate(
+      (Widget widget) =>
+          widget is TextButton &&
+          widget.onPressed == null &&
+          widget.child is Text &&
+          (widget.child! as Text).data == 'Complete',
+    );
+    expect(disabledComplete, findsNothing);
+
+    final Finder enabledComplete = find.byWidgetPredicate(
+      (Widget widget) =>
+          widget is TextButton &&
+          widget.onPressed != null &&
+          widget.child is Text &&
+          (widget.child! as Text).data == 'Complete',
+    );
+    expect(enabledComplete, findsNWidgets(2));
+  });
+
+  testWidgets('long panel title clamps to two lines', (
+    WidgetTester tester,
+  ) async {
+    const String longTitle =
+        'MANGO FALOODA-FALOODA EXTRA VERY LONG PRODUCT NAME';
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          itemPrepBreakdownProvider.overrideWith(
+            (Ref ref, ItemGroupKey key) =>
+                key == _panelKey
+                    ? _samplePrepLines(canComplete: true)
+                    : const <PrepLine>[],
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ProductPrepBreakdownPanel(
+              groupKey: _panelKey,
+              displayTitle: longTitle,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final Text title = tester.widget<Text>(find.text(longTitle));
+    expect(title.maxLines, 2);
+    expect(title.overflow, TextOverflow.ellipsis);
+    expect(find.text('Complete all'), findsOneWidget);
   });
 }

@@ -5,9 +5,14 @@ import '../../../core/utils/order_type_display.dart';
 import '../prep_line.dart';
 
 class PrepLineRow extends StatelessWidget {
-  const PrepLineRow({super.key, required this.line});
+  const PrepLineRow({
+    super.key,
+    required this.line,
+    this.onComplete,
+  });
 
   final PrepLine line;
+  final VoidCallback? onComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -19,85 +24,48 @@ class PrepLineRow extends StatelessWidget {
         horizontal: AppSpacing.gutter,
         vertical: AppSpacing.unit + 4,
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            width: AppSpacing.touchTargetMin / 2,
-            child: Text(
-              '${line.quantity}',
-              style: body?.copyWith(fontWeight: FontWeight.w700),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.unit),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  line.productName,
-                  style: body?.copyWith(fontWeight: FontWeight.w600),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: AppSpacing.touchTargetMin / 2,
+                child: Text(
+                  '${line.quantity}',
+                  style: body?.copyWith(fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(height: AppSpacing.unit / 2),
-                Wrap(
-                  spacing: AppSpacing.unit,
-                  runSpacing: AppSpacing.unit / 2,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+              ),
+              const SizedBox(width: AppSpacing.unit),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _OrderContext(
-                      icon: orderTypePrepIcon(line.orderType),
-                      label: 'Order #${line.displayNumber}',
-                    ),
                     Text(
-                      line.serviceLabel,
-                      style: body?.copyWith(
-                        color: colors.onSurfaceVariant,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      line.productName,
+                      style: body?.copyWith(fontWeight: FontWeight.w600),
                     ),
-                    Text(
-                      _formatTime(line.createdAt),
-                      style: body?.copyWith(
-                        color: colors.onSurfaceVariant,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                if (line.customerName != null &&
-                    line.customerName!.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.unit / 2),
-                  _OrderContext(
-                    icon: Icons.person_outline,
-                    label: line.customerName!,
-                  ),
-                ],
-                if (line.modifierText != null &&
-                    line.modifierText!.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.unit / 2),
-                  Text(
-                    line.modifierText!,
-                    style: body?.copyWith(
-                      color: colors.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-                if (line.note != null && line.note!.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.unit / 2),
-                  Text.rich(
-                    TextSpan(
+                    const SizedBox(height: AppSpacing.unit / 2),
+                    Wrap(
+                      spacing: AppSpacing.unit,
+                      runSpacing: AppSpacing.unit / 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        TextSpan(
-                          text: 'Note: ',
+                        _OrderContext(
+                          icon: orderTypePrepIcon(line.orderType),
+                          label: 'Order #${line.displayNumber}',
+                        ),
+                        Text(
+                          line.serviceLabel,
                           style: body?.copyWith(
+                            color: colors.onSurfaceVariant,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        TextSpan(
-                          text: line.note,
+                        Text(
+                          _formatTime(line.createdAt),
                           style: body?.copyWith(
                             color: colors.onSurfaceVariant,
                             fontSize: 12,
@@ -105,11 +73,78 @@ class PrepLineRow extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ],
-            ),
+                    if (line.customerName != null &&
+                        line.customerName!.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.unit / 2),
+                      _OrderContext(
+                        icon: Icons.person_outline,
+                        label: line.customerName!,
+                      ),
+                    ],
+                    if (line.modifierText != null &&
+                        line.modifierText!.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.unit / 2),
+                      Text(
+                        line.modifierText!,
+                        style: body?.copyWith(
+                          color: colors.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                    if (line.note != null && line.note!.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.unit / 2),
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: 'Note: ',
+                              style: body?.copyWith(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            TextSpan(
+                              text: line.note,
+                              style: body?.copyWith(
+                                color: colors.onSurfaceVariant,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
+          if (onComplete != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                key: ValueKey<String>(
+                  'complete-line-${line.orderId}-${line.itemId}',
+                ),
+                onPressed: onComplete,
+                child: const Text('Complete'),
+              ),
+            )
+          else if (!line.canComplete)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Tooltip(
+                message: 'Start the ticket first',
+                child: TextButton(
+                  onPressed: null,
+                  child: Text(
+                    'Complete',
+                    style: body?.copyWith(color: colors.onSurfaceVariant),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -137,11 +172,14 @@ class _OrderContext extends StatelessWidget {
       children: [
         Icon(icon, size: AppSpacing.gutter, color: color),
         const SizedBox(width: AppSpacing.unit / 2),
-        Text(
-          label,
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: color, fontSize: 12),
+        Flexible(
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: color, fontSize: 12),
+          ),
         ),
       ],
     );
