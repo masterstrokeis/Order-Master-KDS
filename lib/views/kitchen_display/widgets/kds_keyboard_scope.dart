@@ -147,6 +147,7 @@ class KdsKeyboardScope extends ConsumerStatefulWidget {
 class _KdsKeyboardScopeState extends ConsumerState<KdsKeyboardScope> {
   final FocusNode _node = FocusNode(debugLabel: 'kds-keyboard-scope');
   ScrollController? _sidebarListController;
+  KeypadController? _cachedKeypadController;
 
   void _attachSidebarScroller(ScrollController? controller) {
     _sidebarListController = controller;
@@ -154,12 +155,18 @@ class _KdsKeyboardScopeState extends ConsumerState<KdsKeyboardScope> {
 
   @override
   void dispose() {
+    // Prevent Flutter test "pending timers" assertions by cancelling the
+    // keypad legend timer before the widget tree is torn down.
+    // (Cache [KeypadController] in build; never use [ref] directly in dispose.)
+    _cachedKeypadController?.clearLegendVisibleUntil();
     _node.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    _cachedKeypadController ??= ref.read(keypadProvider.notifier);
+
     ref.listen<List<Order>>(ordersForCurrentViewProvider, (
       List<Order>? previous,
       List<Order> next,

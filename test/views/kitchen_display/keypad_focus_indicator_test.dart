@@ -198,6 +198,10 @@ void main() {
       ]),
     );
 
+    // Legend is hidden initially and appears after the first mapped
+    // physical key press.
+    await _dispatchDown(tester, _dot);
+
     expect(find.text('+/-  Tab'), findsOneWidget);
     expect(find.text('Enter  Pick ticket'), findsOneWidget);
     expect(find.text('0-9  Order #'), findsOneWidget);

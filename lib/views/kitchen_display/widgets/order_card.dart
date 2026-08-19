@@ -9,6 +9,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/order_column_packer.dart';
+import '../../../core/utils/order_elapsed.dart';
 import '../../../core/utils/order_title_number.dart';
 import '../../../models/keypad_state.dart';
 import '../../../models/order_item_model.dart';
@@ -133,6 +134,7 @@ class OrderCard extends ConsumerWidget {
                 children: [
                   if (segment.isPrimary)
                     StatusHeaderBand(
+                      orderId: segment.orderId,
                       displayNumber: orderTitleNumber(
                         order,
                         ref.watch(orderTitleNumberSourceProvider),
@@ -141,6 +143,7 @@ class OrderCard extends ConsumerWidget {
                       orderType: order.type,
                       status: order.status,
                       headerColor: headerAccent,
+                      elapsedFrozenAt: terminalStampFor(order),
                     ),
                   if (segment.isPrimary)
                     OrderTypeRow(

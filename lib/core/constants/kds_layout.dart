@@ -58,6 +58,11 @@ abstract final class KdsLayout {
   /// fallback exists if the board reads cramped after keyboard visuals land.
   static const double itemBadgeColumnWidth = 22;
 
+  /// Reserved elapsed-time label on the header time line. Always present so
+  /// `23h 59m` cannot shift the clock text or grow [headerBandHeight].
+  /// Worst case measures ~48px at Inter 12px; 64 leaves drift margin.
+  static const double elapsedLabelWidth = 64;
+
   /// Keyboard focus ring painted by a zero-layout DecoratedBox.
   static const double cardKeyboardFocusBorderWidth = 4;
 

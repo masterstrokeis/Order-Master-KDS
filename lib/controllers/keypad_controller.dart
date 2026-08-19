@@ -26,6 +26,7 @@ class KeypadController extends Notifier<KeypadState> {
   KeypadState build() => KeypadState.initial;
 
   KeypadEffect handleKey(KeypadKey key, {required DateTime now}) {
+    notePhysicalKeyDown(now);
     _expireFlash(now);
     final int? digit = keypadDigit(key);
     if (digit != null) {
@@ -49,6 +50,20 @@ class KeypadController extends Notifier<KeypadState> {
       KeypadKey.dot => _handleDot(),
       KeypadKey.slash => _handleSlash(now),
     };
+  }
+
+  void notePhysicalKeyDown(DateTime now) {
+    state = state.copyWith(
+      legendVisibleUntil: now.add(KdsTiming.keypadLegendIdleTimeout),
+    );
+  }
+
+  /// Cancels the legend auto-hide timer and hides it immediately.
+  ///
+  /// This is called by `KdsKeyboardScope`'s lifecycle so widget tests don't
+  /// report a pending `Timer` after the widget tree is disposed.
+  void clearLegendVisibleUntil() {
+    state = state.copyWith(clearLegendVisibleUntil: true);
   }
 
   void clearFocusIfMissing(Set<String> visibleOrderIds) {

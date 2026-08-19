@@ -1,4 +1,5 @@
 import '../../models/order_model.dart';
+import 'order_elapsed.dart';
 
 OrderUrgency urgencyForOrder(
   Order order,
@@ -6,7 +7,7 @@ OrderUrgency urgencyForOrder(
   required Duration warningThreshold,
   required Duration criticalThreshold,
 }) {
-  final Duration elapsed = now.difference(order.createdAt);
+  final Duration elapsed = elapsedSincePlaced(order, now);
   if (elapsed >= criticalThreshold) {
     return OrderUrgency.critical;
   }

@@ -142,7 +142,11 @@ void main() {
 }
 
 KeypadState _withoutTimestamps(KeypadState state) {
-  return state.copyWith(clearDigitsAt: true, clearFlashUntil: true);
+  return state.copyWith(
+    clearDigitsAt: true,
+    clearFlashUntil: true,
+    clearLegendVisibleUntil: true,
+  );
 }
 
 Future<KeypadState> _stateAfterKey(

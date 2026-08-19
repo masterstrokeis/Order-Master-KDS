@@ -1,29 +1,46 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/kds_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/order_type_display.dart';
 import '../../../models/order_model.dart';
+import 'order_elapsed_label.dart';
 
 class StatusHeaderBand extends StatelessWidget {
   const StatusHeaderBand({
     super.key,
+    required this.orderId,
     required this.displayNumber,
     required this.createdAt,
     required this.orderType,
     required this.headerColor,
     this.status = OrderStatus.newOrder,
+    this.elapsedFrozenAt,
+    this.elapsedNowBuilder,
   });
 
+  final String orderId;
   final String displayNumber;
   final DateTime createdAt;
   final OrderType orderType;
   final OrderStatus status;
   final Color headerColor;
+  final DateTime? elapsedFrozenAt;
+  final DateTime Function()? elapsedNowBuilder;
 
   @override
   Widget build(BuildContext context) {
+    final TextStyle? secondaryStyle = Theme.of(context).textTheme.bodyMedium
+        ?.copyWith(
+          color: AppColors.onStatusHeader.withValues(alpha: 0.9),
+          fontSize: 12,
+        );
+    final TextStyle? elapsedStyle = secondaryStyle?.copyWith(
+      fontWeight: FontWeight.w700,
+    );
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       width: double.infinity,
@@ -46,12 +63,29 @@ class StatusHeaderBand extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  _formatTime(createdAt),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.onStatusHeader.withValues(alpha: 0.9),
-                    fontSize: 12,
-                  ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _formatTime(createdAt),
+                        style: secondaryStyle,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.clip,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.unit),
+                    SizedBox(
+                      width: KdsLayout.elapsedLabelWidth,
+                      child: OrderElapsedLabel(
+                        orderId: orderId,
+                        createdAt: createdAt,
+                        frozenAt: elapsedFrozenAt,
+                        nowBuilder: elapsedNowBuilder ?? DateTime.now,
+                        style: elapsedStyle,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

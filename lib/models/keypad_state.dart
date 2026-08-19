@@ -11,6 +11,7 @@ class KeypadState {
     this.digitsAt,
     this.flash,
     this.flashUntil,
+    this.legendVisibleUntil,
   });
 
   static const KeypadState initial = KeypadState();
@@ -24,6 +25,7 @@ class KeypadState {
   final DateTime? digitsAt;
   final String? flash;
   final DateTime? flashUntil;
+  final DateTime? legendVisibleUntil;
 
   KeypadState copyWith({
     KeypadSurface? surface,
@@ -38,6 +40,8 @@ class KeypadState {
     bool clearFlash = false,
     DateTime? flashUntil,
     bool clearFlashUntil = false,
+    DateTime? legendVisibleUntil,
+    bool clearLegendVisibleUntil = false,
   }) {
     return KeypadState(
       surface: surface ?? this.surface,
@@ -51,6 +55,9 @@ class KeypadState {
       digitsAt: clearDigitsAt ? null : (digitsAt ?? this.digitsAt),
       flash: clearFlash ? null : (flash ?? this.flash),
       flashUntil: clearFlashUntil ? null : (flashUntil ?? this.flashUntil),
+      legendVisibleUntil: clearLegendVisibleUntil
+          ? null
+          : (legendVisibleUntil ?? this.legendVisibleUntil),
     );
   }
 
@@ -63,7 +70,8 @@ class KeypadState {
         other.digits == digits &&
         other.digitsAt == digitsAt &&
         other.flash == flash &&
-        other.flashUntil == flashUntil;
+        other.flashUntil == flashUntil &&
+        other.legendVisibleUntil == legendVisibleUntil;
   }
 
   @override
@@ -75,6 +83,7 @@ class KeypadState {
     digitsAt,
     flash,
     flashUntil,
+    legendVisibleUntil,
   );
 }
 

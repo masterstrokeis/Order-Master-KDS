@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,13 +13,64 @@ import '../../../models/keypad_state.dart';
 import '../../../models/order_model.dart';
 import '../../../providers/providers.dart';
 
-/// Always-visible keypad cheat-sheet under the board.
-class KeypadLegendBar extends ConsumerWidget {
+/// Keypad cheat-sheet under the board.
+///
+/// Hidden until the first mapped physical key press, then auto-hides after
+/// [KdsTiming.keypadLegendIdleTimeout] of inactivity.
+class KeypadLegendBar extends ConsumerStatefulWidget {
   const KeypadLegendBar({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<KeypadLegendBar> createState() => _KeypadLegendBarState();
+}
+
+class _KeypadLegendBarState extends ConsumerState<KeypadLegendBar> {
+  Timer? _hideTimer;
+  DateTime? _scheduledUntil;
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    _hideTimer = null;
+    _scheduledUntil = null;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final KeypadState state = ref.watch(keypadProvider);
+    final DateTime? until = state.legendVisibleUntil;
+
+    final bool shouldShow = until != null && DateTime.now().isBefore(until);
+
+    if (!shouldShow) {
+      _hideTimer?.cancel();
+      _hideTimer = null;
+      _scheduledUntil = null;
+      return const SizedBox.shrink(key: Key('keypad-legend-bar-hidden'));
+    }
+
+    // Reschedule only when the visibility target changes.
+    if (_hideTimer == null || _scheduledUntil != until) {
+      _hideTimer?.cancel();
+      _hideTimer = null;
+      _scheduledUntil = until;
+
+      final Duration delay = until.difference(DateTime.now());
+      _hideTimer = Timer(delay, () {
+        if (!mounted) {
+          return;
+        }
+        // Ignore stale timer callbacks if a newer physical key press
+        // extended the legend.
+        final DateTime? currentUntil =
+            ref.read(keypadProvider).legendVisibleUntil;
+        if (currentUntil == until) {
+          ref.read(keypadProvider.notifier).clearLegendVisibleUntil();
+        }
+      });
+    }
+
     final String? focusedId = state.focusedOrderId;
     final OrderStatus? focusedStatus = focusedId == null
         ? null
