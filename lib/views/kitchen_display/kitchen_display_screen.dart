@@ -47,10 +47,18 @@ class _KitchenDisplayScreenState extends ConsumerState<KitchenDisplayScreen> {
   @override
   void initState() {
     super.initState();
-    _socket.resolveAppliedCursor = () =>
-        ref.read(orderControllerProvider.notifier).syncCursor;
-    _socket.resolveSession = () => ref.read(authControllerProvider).session;
+    // Every callback below reads `ref`, so each needs a mounted guard: the
+    // socket tears down asynchronously and can deliver a queued message after
+    // this screen unmounts.
+    _socket.resolveAppliedCursor = () => mounted
+        ? ref.read(orderControllerProvider.notifier).syncCursor
+        : null;
+    _socket.resolveSession = () =>
+        mounted ? ref.read(authControllerProvider).session : null;
     _socket.onOrderEvent = (Order order, String? cursor) {
+      if (!mounted) {
+        return;
+      }
       final OrderController controller = ref.read(
         orderControllerProvider.notifier,
       );
@@ -58,6 +66,9 @@ class _KitchenDisplayScreenState extends ConsumerState<KitchenDisplayScreen> {
       controller.updateSyncCursor(cursor);
     };
     _socket.onSyncRequired = () {
+      if (!mounted) {
+        return;
+      }
       unawaited(_catchUpSync());
     };
     _socket.onShiftEvent = _onShiftEvent;
@@ -175,6 +186,9 @@ class _KitchenDisplayScreenState extends ConsumerState<KitchenDisplayScreen> {
   }
 
   Future<void> _connectSocket() async {
+    if (!mounted) {
+      return;
+    }
     final AuthState auth = ref.read(authControllerProvider);
     final AuthSession? session = auth.session;
     final String? deviceId = auth.deviceId;
@@ -265,6 +279,9 @@ class _KitchenDisplayScreenState extends ConsumerState<KitchenDisplayScreen> {
         return;
       }
       final AuthState auth = ref.read(authControllerProvider);
+      // Resolved before the awaits below so a station switch that outlives
+      // this screen never touches `ref` post-unmount.
+      final OrderController orders = ref.read(orderControllerProvider.notifier);
       if (auth.session != null && auth.deviceId != null) {
         await ref
             .read(kdsApiServiceProvider)
@@ -274,8 +291,7 @@ class _KitchenDisplayScreenState extends ConsumerState<KitchenDisplayScreen> {
               stationId: next,
             );
       }
-      await ref.read(orderControllerProvider.notifier).refresh();
-      final OrderController orders = ref.read(orderControllerProvider.notifier);
+      await orders.refresh();
       await _socket.updateStation(
         stationId: next,
         lastCursor: orders.syncCursor,

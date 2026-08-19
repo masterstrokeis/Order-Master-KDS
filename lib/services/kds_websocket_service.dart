@@ -102,6 +102,15 @@ class KdsWebSocketService {
 
   void dispose() {
     _disposed = true;
+    // These close over the kitchen display's `ref`. Drop them so a late
+    // delivery can never reach an unmounted widget, independently of how
+    // promptly [disconnect] tears the subscription down.
+    resolveAppliedCursor = null;
+    resolveSession = null;
+    onOrderEvent = null;
+    onSyncRequired = null;
+    onShiftEvent = null;
+    onError = null;
     disconnect(intentional: true);
   }
 
@@ -197,6 +206,9 @@ class KdsWebSocketService {
   }
 
   void _onMessage(dynamic raw) {
+    if (_disposed) {
+      return;
+    }
     _lastMessageAt = DateTime.now();
 
     final Object? decoded = raw is String ? jsonDecode(raw) : raw;

@@ -34,6 +34,9 @@ Color headerColorFor({
   if (status == OrderStatus.cancelled) {
     return AppColors.statusCancelled;
   }
+  if (status == OrderStatus.completed) {
+    return AppColors.statusCompleted;
+  }
   if (urgency == OrderUrgency.critical) {
     return criticalColor;
   }

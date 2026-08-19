@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../core/utils/cancelled_cooking_visibility.dart';
 import '../core/utils/order_event_diff.dart';
+import '../core/utils/order_reopen.dart';
 import '../models/auth_session.dart';
 import '../models/complete_items_result.dart';
 import '../models/kds_api_error.dart';
@@ -112,6 +113,7 @@ class OrderController extends AsyncNotifier<List<Order>> {
     if (isStaleLeftover(orderId)) {
       return;
     }
+    await _completeRemainingItems(orderId);
     await _runOrderAction(
       orderId: orderId,
       allowedFrom: OrderStatus.cooking,
@@ -124,6 +126,28 @@ class OrderController extends AsyncNotifier<List<Order>> {
         );
       },
     );
+  }
+
+  /// Strikes every un-struck line so a cook who marked nothing still leaves a
+  /// fully struck-out ticket. Must run before the status flip — the per-item
+  /// patch in [toggleItemCompleted] only applies while the order is cooking.
+  Future<void> _completeRemainingItems(String orderId) async {
+    final List<Order>? orders = state.value;
+    if (orders == null) {
+      return;
+    }
+    final Order? order = _find(orders, orderId);
+    if (order == null || order.status != OrderStatus.cooking) {
+      return;
+    }
+    final List<({String orderId, String itemId})> targets = order.items
+        .where((OrderItem item) => !item.isCompleted && !item.isRemoved)
+        .map((OrderItem item) => (orderId: orderId, itemId: item.id))
+        .toList();
+    if (targets.isEmpty) {
+      return;
+    }
+    await completeItems(targets);
   }
 
   Future<void> rollbackOrder(String orderId) async {
@@ -330,13 +354,25 @@ class OrderController extends AsyncNotifier<List<Order>> {
   ///
   /// Skips a snapshot whose [Order.version] is older than the ticket already
   /// on the board so a delayed `/sync` event cannot wipe a newer live update.
+  ///
+  /// A snapshot that adds work to an already-completed ticket rolls it back to
+  /// Cooking, so the new line cannot be stranded on the Completed tab. The
+  /// rollback runs after the event emit above, keeping the existing
+  /// announcement and update pulse as the single notification for the change.
   void replaceOrder(Order order) {
     final List<Order> current = state.value ?? <Order>[];
     final int index = current.indexWhere((Order o) => o.id == order.id);
     if (index >= 0 && order.version < current[index].version) {
       return;
     }
+    final Order? previous = index >= 0 ? current[index] : null;
+    final bool reopen =
+        previous != null &&
+        shouldReopenCompletedOrder(previous: previous, next: order);
     _replaceLocal(order, insertIfMissing: true, emitEvents: true);
+    if (reopen) {
+      unawaited(rollbackOrder(order.id));
+    }
   }
 
   void updateSyncCursor(String? cursor) {

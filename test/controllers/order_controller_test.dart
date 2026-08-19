@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:order_master_kds/controllers/auth_controller.dart';
 import 'package:order_master_kds/controllers/order_controller.dart';
+import 'package:order_master_kds/core/utils/cancelled_cooking_visibility.dart';
 import 'package:order_master_kds/core/utils/order_column_packer.dart';
 import 'package:order_master_kds/models/auth_session.dart';
 import 'package:order_master_kds/models/complete_items_result.dart';
@@ -903,6 +904,394 @@ void main() {
       expect(result.completed, 1);
       expect(result.failed, 1);
       expect(result.failedDisplayNumbers, contains(cooking.displayNumber));
+    });
+  });
+
+  group('reopen a completed order when the POS adds work', () {
+    test('added item rolls the order back to cooking', () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order completed = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.completed);
+
+      controller.replaceOrder(
+        completed.copyWith(
+          version: completed.version + 1,
+          items: <OrderItem>[
+            ...completed.items,
+            OrderItem(
+              id: 'item_late:${completed.stationId}',
+              productId: 'prod_late',
+              nameSnapshot: 'Late Fries',
+              quantity: 1,
+              isNew: true,
+            ),
+          ],
+        ),
+      );
+      await pumpEventQueue();
+
+      final Order reopened = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.id == completed.id);
+      expect(reopened.status, OrderStatus.cooking);
+      expect(reopened.completedAt, isNull);
+      expect(
+        reopened.items.any((OrderItem i) => i.nameSnapshot == 'Late Fries'),
+        isTrue,
+      );
+    });
+
+    test('reopened order becomes visible on the cooking tab', () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order completed = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.completed);
+
+      expect(
+        isVisibleOnCookingTab(
+          order: completed,
+          now: DateTime.now().toUtc(),
+          cancelledDisplayDuration: const Duration(seconds: 30),
+        ),
+        isFalse,
+      );
+
+      controller.replaceOrder(
+        completed.copyWith(
+          version: completed.version + 1,
+          items: <OrderItem>[
+            ...completed.items,
+            OrderItem(
+              id: 'item_late:${completed.stationId}',
+              productId: 'prod_late',
+              nameSnapshot: 'Late Fries',
+              quantity: 1,
+            ),
+          ],
+        ),
+      );
+      await pumpEventQueue();
+
+      final Order reopened = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.id == completed.id);
+      expect(
+        isVisibleOnCookingTab(
+          order: reopened,
+          now: DateTime.now().toUtc(),
+          cancelledDisplayDuration: const Duration(seconds: 30),
+        ),
+        isTrue,
+      );
+    });
+
+    test('the itemAdded event is emitted once, not duplicated', () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order completed = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.completed);
+
+      final List<KdsOrderEvent> events = <KdsOrderEvent>[];
+      final ProviderSubscription<AsyncValue<KdsOrderEvent>> subscription =
+          container.listen<AsyncValue<KdsOrderEvent>>(
+            orderEventsProvider,
+            (
+              AsyncValue<KdsOrderEvent>? previous,
+              AsyncValue<KdsOrderEvent> next,
+            ) {
+              next.whenData(events.add);
+            },
+          );
+
+      controller.replaceOrder(
+        completed.copyWith(
+          version: completed.version + 1,
+          items: <OrderItem>[
+            ...completed.items,
+            OrderItem(
+              id: 'item_late:${completed.stationId}',
+              productId: 'prod_late',
+              nameSnapshot: 'Late Fries',
+              quantity: 1,
+            ),
+          ],
+        ),
+      );
+      await pumpEventQueue();
+      subscription.close();
+
+      expect(
+        events.map((KdsOrderEvent e) => e.kind),
+        <KdsOrderEventKind>[KdsOrderEventKind.itemAdded],
+      );
+    });
+
+    test('a snapshot with no added work stays completed', () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order completed = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.completed);
+
+      controller.replaceOrder(
+        completed.copyWith(
+          version: completed.version + 1,
+          note: 'allergy: no nuts',
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(
+        container
+            .read(orderControllerProvider)
+            .requireValue
+            .firstWhere((Order o) => o.id == completed.id)
+            .status,
+        OrderStatus.completed,
+      );
+    });
+
+    test('stale leftovers are not reopened', () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order completed = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.completed);
+      controller.markCurrentOrdersStale();
+
+      controller.replaceOrder(
+        completed.copyWith(
+          version: completed.version + 1,
+          items: <OrderItem>[
+            ...completed.items,
+            OrderItem(
+              id: 'item_late:${completed.stationId}',
+              productId: 'prod_late',
+              nameSnapshot: 'Late Fries',
+              quantity: 1,
+            ),
+          ],
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(
+        container
+            .read(orderControllerProvider)
+            .requireValue
+            .firstWhere((Order o) => o.id == completed.id)
+            .status,
+        OrderStatus.completed,
+      );
+    });
+  });
+
+  group('completeOrder strikes out remaining items', () {
+    test('un-struck items are all completed alongside the order', () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order cooking = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere(
+            (Order o) =>
+                o.status == OrderStatus.cooking &&
+                o.items.any(
+                  (OrderItem i) => !i.isCompleted && !i.isRemoved,
+                ),
+          );
+
+      await controller.completeOrder(cooking.id);
+
+      final Order updated = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.id == cooking.id);
+      expect(updated.status, OrderStatus.completed);
+      expect(
+        updated.items
+            .where((OrderItem i) => !i.isRemoved)
+            .every((OrderItem i) => i.isCompleted),
+        isTrue,
+      );
+    });
+
+    test('removed items are left untouched', () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order cooking = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere(
+            (Order o) =>
+                o.status == OrderStatus.cooking &&
+                o.items.any(
+                  (OrderItem i) => !i.isCompleted && !i.isRemoved,
+                ),
+          );
+      final OrderItem target = cooking.items.firstWhere(
+        (OrderItem i) => !i.isCompleted && !i.isRemoved,
+      );
+
+      controller.replaceOrder(
+        cooking.copyWith(
+          version: cooking.version + 1,
+          items: cooking.items
+              .map(
+                (OrderItem i) =>
+                    i.id == target.id ? i.copyWith(isRemoved: true) : i,
+              )
+              .toList(),
+        ),
+      );
+      await pumpEventQueue();
+
+      await controller.completeOrder(cooking.id);
+
+      final OrderItem removed = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.id == cooking.id)
+          .items
+          .firstWhere((OrderItem i) => i.id == target.id);
+      expect(removed.isRemoved, isTrue);
+      expect(removed.isCompleted, isFalse);
+    });
+
+    test('no item PATCH is issued when every line is already struck', () async {
+      final _RecordingItemPatchApi api = _RecordingItemPatchApi();
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          authControllerProvider.overrideWith(_AuthenticatedAuthController.new),
+          kdsApiServiceProvider.overrideWith((Ref ref) => api),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order cooking = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.cooking);
+
+      for (final OrderItem item in cooking.items) {
+        if (!item.isCompleted && !item.isRemoved) {
+          await controller.toggleItemCompleted(cooking.id, item.id);
+        }
+      }
+      final int patchesAfterManualStrike = api.patchCalls;
+
+      await controller.completeOrder(cooking.id);
+
+      expect(api.patchCalls, patchesAfterManualStrike);
+      expect(
+        container
+            .read(orderControllerProvider)
+            .requireValue
+            .firstWhere((Order o) => o.id == cooking.id)
+            .status,
+        OrderStatus.completed,
+      );
+    });
+
+    test('one PATCH per un-struck line before the status flip', () async {
+      final _RecordingItemPatchApi api = _RecordingItemPatchApi();
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          authControllerProvider.overrideWith(_AuthenticatedAuthController.new),
+          kdsApiServiceProvider.overrideWith((Ref ref) => api),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order cooking = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.cooking);
+      final int pending = cooking.items
+          .where((OrderItem i) => !i.isCompleted && !i.isRemoved)
+          .length;
+      expect(pending, greaterThan(0));
+
+      await controller.completeOrder(cooking.id);
+
+      expect(api.patchCalls, pending);
+    });
+
+    test('stale leftovers strike nothing and stay cooking', () async {
+      final _RecordingItemPatchApi api = _RecordingItemPatchApi();
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          authControllerProvider.overrideWith(_AuthenticatedAuthController.new),
+          kdsApiServiceProvider.overrideWith((Ref ref) => api),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(orderControllerProvider.future);
+      final OrderController controller = container.read(
+        orderControllerProvider.notifier,
+      );
+      final Order cooking = container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.status == OrderStatus.cooking);
+      controller.markCurrentOrdersStale();
+
+      await controller.completeOrder(cooking.id);
+
+      expect(api.patchCalls, 0);
+      expect(
+        container
+            .read(orderControllerProvider)
+            .requireValue
+            .firstWhere((Order o) => o.id == cooking.id)
+            .status,
+        OrderStatus.cooking,
+      );
     });
   });
 }
