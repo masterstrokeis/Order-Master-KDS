@@ -38,6 +38,7 @@ abstract final class KdsLayout {
 
   /// 12px secondary text ≈ 16–18; pad top 4 included below.
   static const double modifierLineHeight = 18;
+
   /// Matches `AppTextStyles.bodyMd` used for cooking-card notes.
   static const double noteLineHeight = 24;
   static const double secondaryTextTopPadding = 4;
@@ -50,4 +51,16 @@ abstract final class KdsLayout {
 
   /// `_OrderUpdatePulse` always paints a 3px border (idle or active).
   static const double cardPulseBorderWidth = 3;
+
+  /// Reserved item-number badge column. Always present, even when unfocused,
+  /// so focusing a ticket cannot change wrap width and re-pack the board.
+  /// 22 + [itemTextGap] 12 = 34px gutter (confirmed). A tighter 18+8=26px
+  /// fallback exists if the board reads cramped after keyboard visuals land.
+  static const double itemBadgeColumnWidth = 22;
+
+  /// Keyboard focus ring painted by a zero-layout DecoratedBox.
+  static const double cardKeyboardFocusBorderWidth = 4;
+
+  /// Always-visible keypad cheat-sheet footer under the board.
+  static const double legendBarHeight = 32;
 }

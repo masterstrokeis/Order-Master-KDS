@@ -51,10 +51,7 @@ class CardSegment {
 }
 
 class PackedOrderBoard {
-  const PackedOrderBoard({
-    required this.columns,
-    required this.columnWidth,
-  });
+  const PackedOrderBoard({required this.columns, required this.columnWidth});
 
   final List<List<CardSegment>> columns;
   final double columnWidth;
@@ -94,6 +91,8 @@ double estimateItemHeight(OrderItem item, double columnWidth) {
   double textWidth =
       columnWidth -
       (KdsLayout.cardBodyHorizontalPadding * 2) -
+      KdsLayout.itemBadgeColumnWidth -
+      KdsLayout.itemTextGap -
       KdsLayout.qtyColumnWidth -
       KdsLayout.itemTextGap;
 
@@ -196,6 +195,26 @@ double estimateSegmentHeight({
       (isPrimary ? estimateOrderNoteHeight(order.note, columnWidth) : 0);
 }
 
+/// Board reading order: the sequence [packOrderColumns] fills columns from.
+///
+/// Column 0 is filled top-down, then column 1, so index order here is what a
+/// chef reads left-to-right across the board. Keypad stepping reuses this so
+/// `+`/`-` can never disagree with the layout.
+List<Order> sortOrdersForBoard({
+  required List<Order> orders,
+  DateTime Function(Order order)? sortTime,
+  bool newestFirst = false,
+}) {
+  final DateTime Function(Order order) timeOf =
+      sortTime ?? (Order order) => order.createdAt;
+  return List<Order>.of(orders)
+    ..sort((Order a, Order b) {
+      final int byTime = timeOf(a).compareTo(timeOf(b));
+      final int ordered = byTime != 0 ? byTime : a.id.compareTo(b.id);
+      return newestFirst ? -ordered : ordered;
+    });
+}
+
 PackedOrderBoard packOrderColumns({
   required List<Order> orders,
   required double boardWidth,
@@ -203,14 +222,11 @@ PackedOrderBoard packOrderColumns({
   DateTime Function(Order order)? sortTime,
   bool newestFirst = false,
 }) {
-  final DateTime Function(Order order) timeOf =
-      sortTime ?? (Order order) => order.createdAt;
-  final List<Order> sorted = List<Order>.of(orders)
-    ..sort((Order a, Order b) {
-      final int byTime = timeOf(a).compareTo(timeOf(b));
-      final int ordered = byTime != 0 ? byTime : a.id.compareTo(b.id);
-      return newestFirst ? -ordered : ordered;
-    });
+  final List<Order> sorted = sortOrdersForBoard(
+    orders: orders,
+    sortTime: sortTime,
+    newestFirst: newestFirst,
+  );
 
   final int viewportColumnCount = computeColumnCount(boardWidth);
   final double columnWidth = computeColumnWidth(
@@ -338,10 +354,7 @@ PackedOrderBoard packOrderColumns({
     }
   }
 
-  return PackedOrderBoard(
-    columns: columns,
-    columnWidth: columnWidth,
-  );
+  return PackedOrderBoard(columns: columns, columnWidth: columnWidth);
 }
 
 void _ensureColumn(

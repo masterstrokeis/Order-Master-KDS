@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../controllers/keypad_controller.dart';
 import '../../../core/constants/kds_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/order_column_packer.dart';
+import '../../../models/keypad_state.dart';
 import '../../../models/order_model.dart';
 import '../../../providers/providers.dart';
 import 'order_card.dart';
@@ -82,8 +86,54 @@ class _OrderBoardState extends ConsumerState<OrderBoard> {
     );
   }
 
+  void _scrollFocusedOrderIntoView(String? orderId) {
+    if (orderId == null || !_scrollController.hasClients) {
+      return;
+    }
+    final PackedOrderBoard packed = ref.read(
+      packedOrderBoardProvider(
+        BoardLayoutConstraints(
+          boardWidth: widget.boardWidth,
+          boardHeight: widget.boardHeight,
+        ),
+      ),
+    );
+    int columnIndex = -1;
+    for (int i = 0; i < packed.columns.length; i++) {
+      if (packed.columns[i].any(
+        (CardSegment segment) => segment.orderId == orderId,
+      )) {
+        columnIndex = i;
+        break;
+      }
+    }
+    if (columnIndex < 0) {
+      return;
+    }
+    final double max = _scrollController.position.maxScrollExtent;
+    final double target =
+        (columnIndex * (packed.columnWidth + KdsLayout.cardGap)).clamp(
+          0.0,
+          max,
+        );
+    unawaited(
+      _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(
+      keypadProvider.select((KeypadState s) => s.focusedOrderId),
+      (String? prev, String? next) {
+        _scrollFocusedOrderIntoView(next);
+      },
+    );
+
     final List<Order> visibleOrders = ref.watch(ordersForCurrentViewProvider);
     if (visibleOrders.isEmpty) {
       final KdsTab tab = ref.watch(selectedKdsTabProvider);
@@ -113,7 +163,9 @@ class _OrderBoardState extends ConsumerState<OrderBoard> {
 
     if (_lastColumnCount != packed.columns.length) {
       _lastColumnCount = packed.columns.length;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _syncEdgeVisibility());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _syncEdgeVisibility(),
+      );
     }
 
     return Stack(

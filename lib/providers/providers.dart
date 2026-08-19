@@ -245,6 +245,32 @@ final orderUrgencyProvider = Provider.family<OrderUrgency, String>((
   );
 });
 
+/// Timestamp each tab sorts tickets by.
+DateTime Function(Order order) boardSortTimeFor(KdsTab tab) {
+  return switch (tab) {
+    KdsTab.cooking => (Order order) => order.createdAt,
+    KdsTab.completed => (Order order) => order.completedAt ?? order.updatedAt,
+    KdsTab.cancelled => (Order order) => order.cancelledAt ?? order.updatedAt,
+  };
+}
+
+/// Visible tickets in board reading order (left-to-right, top-down).
+///
+/// Shares [sortOrdersForBoard] and [boardSortTimeFor] with
+/// [packedOrderBoardProvider], so keypad stepping can never walk a different
+/// sequence than the one on screen.
+final Provider<List<Order>> boardOrderedOrdersProvider = Provider<List<Order>>((
+  Ref ref,
+) {
+  final KdsTab tab = ref.watch(selectedKdsTabProvider);
+  final BoardTicketOrder ticketOrder = ref.watch(boardTicketOrderProvider);
+  return sortOrdersForBoard(
+    orders: ref.watch(ordersForCurrentViewProvider),
+    sortTime: boardSortTimeFor(tab),
+    newestFirst: ticketOrder == BoardTicketOrder.newestFirst,
+  );
+});
+
 final packedOrderBoardProvider =
     Provider.family<PackedOrderBoard, BoardLayoutConstraints>((
       Ref ref,
@@ -260,11 +286,7 @@ final packedOrderBoardProvider =
         boardWidth: constraints.boardWidth,
         boardHeight: constraints.boardHeight,
         newestFirst: ticketOrder == BoardTicketOrder.newestFirst,
-        sortTime: (Order order) => switch (tab) {
-          KdsTab.cooking => order.createdAt,
-          KdsTab.completed => order.completedAt ?? order.updatedAt,
-          KdsTab.cancelled => order.cancelledAt ?? order.updatedAt,
-        },
+        sortTime: boardSortTimeFor(tab),
       );
     });
 

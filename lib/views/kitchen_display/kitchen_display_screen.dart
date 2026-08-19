@@ -20,7 +20,10 @@ import '../../providers/providers.dart';
 import '../../services/kds_api_service.dart';
 import '../../services/kds_websocket_service.dart';
 import '../login/login_screen.dart';
+import 'widgets/kds_keyboard_scope.dart';
 import 'widgets/kds_top_bar.dart';
+import 'widgets/keypad_legend_bar.dart';
+import 'widgets/keypad_type_ahead_indicator.dart';
 import 'widgets/order_board.dart';
 import 'widgets/product_sidebar.dart';
 import 'widgets/shift_opened_dialog.dart';
@@ -95,9 +98,7 @@ class _KitchenDisplayScreenState extends ConsumerState<KitchenDisplayScreen> {
       SnackBar(
         content: Text(
           message,
-          style: AppTextStyles.bodyMd.copyWith(
-            color: colors.onInverseSurface,
-          ),
+          style: AppTextStyles.bodyMd.copyWith(color: colors.onInverseSurface),
         ),
         backgroundColor: colors.inverseSurface,
         behavior: SnackBarBehavior.floating,
@@ -265,11 +266,13 @@ class _KitchenDisplayScreenState extends ConsumerState<KitchenDisplayScreen> {
       }
       final AuthState auth = ref.read(authControllerProvider);
       if (auth.session != null && auth.deviceId != null) {
-        await ref.read(kdsApiServiceProvider).setDeviceStation(
-          session: auth.session!,
-          deviceId: auth.deviceId!,
-          stationId: next,
-        );
+        await ref
+            .read(kdsApiServiceProvider)
+            .setDeviceStation(
+              session: auth.session!,
+              deviceId: auth.deviceId!,
+              stationId: next,
+            );
       }
       await ref.read(orderControllerProvider.notifier).refresh();
       final OrderController orders = ref.read(orderControllerProvider.notifier);
@@ -284,53 +287,63 @@ class _KitchenDisplayScreenState extends ConsumerState<KitchenDisplayScreen> {
     );
 
     return Scaffold(
-      body: Column(
-        children: [
-          const KdsTopBar(),
-          Expanded(
-            child: ordersAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (Object error, StackTrace stackTrace) => Center(
-                child: Text(
-                  error is KdsApiError
-                      ? error.message
-                      : error.toString(),
-                ),
-              ),
-              data: (_) {
-                final bool showProductQuantityList = ref.watch(
-                  productQuantityListVisibleProvider,
-                );
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (showProductQuantityList) const ProductSidebar(),
-                    Expanded(
-                      child: ColoredBox(
-                        color: Theme.of(context).scaffoldBackgroundColor,
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpacing.pageMargin),
-                          child: LayoutBuilder(
-                            builder:
-                                (
-                                  BuildContext context,
-                                  BoxConstraints constraints,
-                                ) {
-                                  return OrderBoard(
-                                    boardWidth: constraints.maxWidth,
-                                    boardHeight: constraints.maxHeight,
-                                  );
-                                },
-                          ),
-                        ),
+      body: KdsKeyboardScope(
+        child: Column(
+          children: [
+            const KdsTopBar(),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ordersAsync.when(
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (Object error, StackTrace stackTrace) => Center(
+                      child: Text(
+                        error is KdsApiError ? error.message : error.toString(),
                       ),
                     ),
-                  ],
-                );
-              },
+                    data: (_) {
+                      final bool showProductQuantityList = ref.watch(
+                        productQuantityListVisibleProvider,
+                      );
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (showProductQuantityList) const ProductSidebar(),
+                          Expanded(
+                            child: ColoredBox(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              child: Padding(
+                                padding: const EdgeInsets.all(
+                                  AppSpacing.pageMargin,
+                                ),
+                                child: LayoutBuilder(
+                                  builder:
+                                      (
+                                        BuildContext context,
+                                        BoxConstraints constraints,
+                                      ) {
+                                        return OrderBoard(
+                                          boardWidth: constraints.maxWidth,
+                                          boardHeight: constraints.maxHeight,
+                                        );
+                                      },
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const KeypadTypeAheadIndicator(),
+                ],
+              ),
             ),
-          ),
-        ],
+            const KeypadLegendBar(),
+          ],
+        ),
       ),
     );
   }

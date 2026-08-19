@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/kds_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -10,6 +11,9 @@ class OrderItemList extends StatelessWidget {
   const OrderItemList({
     super.key,
     required this.items,
+    required this.orderId,
+    required this.baseItemIndex,
+    required this.focusedBadgesVisible,
     required this.orderStatus,
     required this.onToggleItem,
     required this.onAcknowledgeRemoved,
@@ -17,6 +21,13 @@ class OrderItemList extends StatelessWidget {
   });
 
   final List<OrderItem> items;
+  final String orderId;
+
+  /// 0-based index of the first item in this segment within the full order.
+  /// Continuation cards pass `segment.itemStartIndex` so numbering stays
+  /// order-wide instead of restarting per card.
+  final int baseItemIndex;
+  final bool focusedBadgesVisible;
   final OrderStatus orderStatus;
   final void Function(String itemId) onToggleItem;
   final void Function(String itemId) onAcknowledgeRemoved;
@@ -27,15 +38,18 @@ class OrderItemList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final OrderItem item in items) ...[
+        for (int i = 0; i < items.length; i++) ...[
           OrderItemRow(
-            item: item,
-            canToggle: allowMutations &&
+            item: items[i],
+            orderId: orderId,
+            numberBadge: focusedBadgesVisible ? baseItemIndex + i + 1 : null,
+            canToggle:
+                allowMutations &&
                 orderStatus == OrderStatus.cooking &&
-                !item.isRemoved,
-            onDoubleTap: () => onToggleItem(item.id),
+                !items[i].isRemoved,
+            onDoubleTap: () => onToggleItem(items[i].id),
             onAcknowledgeRemoved: allowMutations
-                ? () => onAcknowledgeRemoved(item.id)
+                ? () => onAcknowledgeRemoved(items[i].id)
                 : null,
           ),
           const SizedBox(height: AppSpacing.gutter),
@@ -49,12 +63,16 @@ class OrderItemRow extends StatelessWidget {
   const OrderItemRow({
     super.key,
     required this.item,
+    required this.orderId,
     required this.canToggle,
     required this.onDoubleTap,
     required this.onAcknowledgeRemoved,
+    this.numberBadge,
   });
 
   final OrderItem item;
+  final String orderId;
+  final int? numberBadge;
   final bool canToggle;
   final VoidCallback onDoubleTap;
   final VoidCallback? onAcknowledgeRemoved;
@@ -65,8 +83,7 @@ class OrderItemRow extends StatelessWidget {
     final TextStyle? base = Theme.of(context).textTheme.bodyMedium;
     final bool struck = item.isCompleted && !item.isRemoved;
     final bool highlightNew = item.isNew && !item.isRemoved;
-    final bool highlightRemovedUnseen =
-        item.isRemoved && item.isRemovedUnseen;
+    final bool highlightRemovedUnseen = item.isRemoved && item.isRemovedUnseen;
 
     final TextDecoration? decoration = struck
         ? TextDecoration.lineThrough
@@ -90,6 +107,21 @@ class OrderItemRow extends StatelessWidget {
     final Widget content = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        SizedBox(
+          width: KdsLayout.itemBadgeColumnWidth,
+          child: numberBadge == null
+              ? null
+              : Text(
+                  '$numberBadge',
+                  key: Key('item-number-badge-$orderId-$numberBadge'),
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.labelCaps.copyWith(
+                    color: AppColors.keyboardFocus,
+                    height: 1,
+                  ),
+                ),
+        ),
+        const SizedBox(width: KdsLayout.itemTextGap),
         SizedBox(
           width: 20,
           child: Text(
@@ -126,10 +158,7 @@ class OrderItemRow extends StatelessWidget {
                   child: Text(
                     item.modifierText!,
                     style: withStrike(
-                      base?.copyWith(
-                        color: secondaryColor,
-                        fontSize: 12,
-                      ),
+                      base?.copyWith(color: secondaryColor, fontSize: 12),
                       secondaryColor,
                     ),
                   ),

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/kds_layout.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/order_type_display.dart';
 import '../prep_line.dart';
 
@@ -9,10 +12,12 @@ class PrepLineRow extends StatelessWidget {
     super.key,
     required this.line,
     this.onComplete,
+    this.numberBadge,
   });
 
   final PrepLine line;
   final VoidCallback? onComplete;
+  final int? numberBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +35,21 @@ class PrepLineRow extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (numberBadge != null) ...[
+                SizedBox(
+                  width: KdsLayout.itemBadgeColumnWidth,
+                  child: Text(
+                    '$numberBadge',
+                    key: Key('line-number-badge-$numberBadge'),
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.labelCaps.copyWith(
+                      color: AppColors.keyboardFocus,
+                      height: 1,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: KdsLayout.itemTextGap),
+              ],
               SizedBox(
                 width: AppSpacing.touchTargetMin / 2,
                 child: Text(

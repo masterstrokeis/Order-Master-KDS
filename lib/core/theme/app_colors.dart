@@ -51,18 +51,25 @@ abstract final class AppColors {
 
   // KDS semantic status / urgency (from desktop reference + plan).
   static const Color statusNew = Color(0xFF475569);
+
   /// Lighter slate for dark boards so new-order headers stay distinct.
   static const Color statusNewOnDark = Color(0xFF64748B);
   static const Color statusCooking = Color(0xFFF97316);
   static const Color statusCompleted = Color(0xFF64748B);
+
   /// Muted cancelled header — distinct from urgency critical red.
   static const Color statusCancelled = Color(0xFF9CA3AF);
   static const Color urgencyWarning = Color(0xFFF59E0B);
   static const Color urgencyCritical = Color(0xFFEF4444);
+
   /// Blink border for an existing ticket after a spoken update.
   static const Color orderUpdatePulse = Color(0xFFFBBF24);
   static const Color statusTabActive = Color(0xFF10B981);
   static const Color onStatusHeader = Color(0xFFFFFFFF);
+
+  /// Keyboard focus ring — cool blue, distinct from cooking orange, urgency
+  /// amber/red, and the update-pulse yellow.
+  static const Color keyboardFocus = Color(0xFF38BDF8);
 
   // Always-dark chrome (top bar + sidebar) — theme-independent.
   static const Color chromeHeader = Color(0xFF0F172A);

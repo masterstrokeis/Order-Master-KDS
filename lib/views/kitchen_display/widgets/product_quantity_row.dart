@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/kds_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_text_styles.dart';
 
 class QtyBadge extends StatelessWidget {
   const QtyBadge({super.key, required this.quantity});
@@ -38,12 +40,14 @@ class ProductQuantityRow extends StatelessWidget {
     required this.name,
     required this.quantity,
     this.modifierText,
+    this.numberBadge,
     this.onTap,
   });
 
   final String name;
   final String? modifierText;
   final int quantity;
+  final int? numberBadge;
   final VoidCallback? onTap;
 
   @override
@@ -73,6 +77,21 @@ class ProductQuantityRow extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (numberBadge != null) ...[
+                  SizedBox(
+                    width: KdsLayout.itemBadgeColumnWidth,
+                    child: Text(
+                      '$numberBadge',
+                      key: Key('group-number-badge-$numberBadge'),
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.labelCaps.copyWith(
+                        color: AppColors.keyboardFocus,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: KdsLayout.itemTextGap),
+                ],
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

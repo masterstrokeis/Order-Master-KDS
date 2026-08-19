@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../controllers/keypad_controller.dart';
+import '../../../core/constants/kds_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/order_column_packer.dart';
 import '../../../core/utils/order_title_number.dart';
+import '../../../models/keypad_state.dart';
 import '../../../models/order_item_model.dart';
 import '../../../models/order_model.dart';
 import '../../../models/urgency_settings.dart';
@@ -37,9 +40,10 @@ Color headerColorFor({
     return warningColor;
   }
   return switch (status) {
-    OrderStatus.newOrder => brightness == Brightness.dark
-        ? AppColors.statusNewOnDark
-        : AppColors.statusNew,
+    OrderStatus.newOrder =>
+      brightness == Brightness.dark
+          ? AppColors.statusNewOnDark
+          : AppColors.statusNew,
     OrderStatus.cooking => AppColors.statusCooking,
     OrderStatus.completed => AppColors.statusCompleted,
     OrderStatus.cancelled => AppColors.statusCancelled,
@@ -89,103 +93,123 @@ class OrderCard extends ConsumerWidget {
         (Set<String> ids) => ids.contains(order.id),
       ),
     );
+    final bool keyboardFocused = ref.watch(
+      keypadProvider.select(
+        (KeypadState s) => s.focusedOrderId == segment.orderId,
+      ),
+    );
 
-    return _OrderUpdatePulse(
-      orderId: segment.orderId,
-      pulseUntil: pulseUntil,
-      builder: (BuildContext context, double pulseT) {
-        final Color headerAccent = pulseT == 0
-            ? accent
-            : Color.lerp(accent, AppColors.orderUpdatePulse, pulseT * 0.5)!;
-        return Material(
-          key: ValueKey<String>('${segment.orderId}:${segment.segmentIndex}'),
-          color: Theme.of(context).colorScheme.surface,
-          elevation: 1,
-          shadowColor: Colors.black26,
-          borderRadius: BorderRadius.circular(AppRadii.lg),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            // TODO: define card tap behavior (order detail / bump).
-            onTap: () {},
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (segment.isPrimary)
-                  StatusHeaderBand(
-                    displayNumber: orderTitleNumber(
-                      order,
-                      ref.watch(orderTitleNumberSourceProvider),
-                    ),
-                    createdAt: order.createdAt,
-                    orderType: order.type,
-                    status: order.status,
-                    headerColor: headerAccent,
-                  ),
-                if (segment.isPrimary)
-                  OrderTypeRow(
-                    type: order.type,
-                    tableNumber: order.tableNumber,
-                    customerName: order.customerName,
-                  ),
-                if (segment.isPrimary && hasVisibleOrderNote(order.note))
-                  OrderNoteBand(note: order.note!.trim()),
-                if (segment.showIncomingContinued)
-                  const ContinuedLabel(
-                    direction: ContinuedLabelDirection.incoming,
-                  ),
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.unit + 4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      OrderItemList(
-                        items: items,
-                        orderStatus: order.status,
-                        allowMutations: !staleLeftover,
-                        onToggleItem: (String itemId) {
-                          ref
-                              .read(orderControllerProvider.notifier)
-                              .toggleItemCompleted(order.id, itemId);
-                        },
-                        onAcknowledgeRemoved: (String itemId) {
-                          ref
-                              .read(orderControllerProvider.notifier)
-                              .acknowledgeRemovedItem(order.id, itemId);
-                        },
+    return DecoratedBox(
+      key: keyboardFocused
+          ? Key('order-keyboard-focus-${segment.orderId}')
+          : null,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+        border: Border.all(
+          color: keyboardFocused ? AppColors.keyboardFocus : Colors.transparent,
+          width: KdsLayout.cardKeyboardFocusBorderWidth,
+        ),
+      ),
+      child: _OrderUpdatePulse(
+        orderId: segment.orderId,
+        pulseUntil: pulseUntil,
+        builder: (BuildContext context, double pulseT) {
+          final Color headerAccent = pulseT == 0
+              ? accent
+              : Color.lerp(accent, AppColors.orderUpdatePulse, pulseT * 0.5)!;
+          return Material(
+            key: ValueKey<String>('${segment.orderId}:${segment.segmentIndex}'),
+            color: Theme.of(context).colorScheme.surface,
+            elevation: 1,
+            shadowColor: Colors.black26,
+            borderRadius: BorderRadius.circular(AppRadii.lg),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              // TODO: define card tap behavior (order detail / bump).
+              onTap: () {},
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (segment.isPrimary)
+                    StatusHeaderBand(
+                      displayNumber: orderTitleNumber(
+                        order,
+                        ref.watch(orderTitleNumberSourceProvider),
                       ),
-                      if (segment.showOutgoingContinued)
-                        const ContinuedLabel(
-                          direction: ContinuedLabelDirection.outgoing,
+                      createdAt: order.createdAt,
+                      orderType: order.type,
+                      status: order.status,
+                      headerColor: headerAccent,
+                    ),
+                  if (segment.isPrimary)
+                    OrderTypeRow(
+                      type: order.type,
+                      tableNumber: order.tableNumber,
+                      customerName: order.customerName,
+                    ),
+                  if (segment.isPrimary && hasVisibleOrderNote(order.note))
+                    OrderNoteBand(note: order.note!.trim()),
+                  if (segment.showIncomingContinued)
+                    const ContinuedLabel(
+                      direction: ContinuedLabelDirection.incoming,
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.all(AppSpacing.unit + 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        OrderItemList(
+                          items: items,
+                          orderId: order.id,
+                          baseItemIndex: segment.itemStartIndex,
+                          focusedBadgesVisible: keyboardFocused,
+                          orderStatus: order.status,
+                          allowMutations: !staleLeftover,
+                          onToggleItem: (String itemId) {
+                            ref
+                                .read(orderControllerProvider.notifier)
+                                .toggleItemCompleted(order.id, itemId);
+                          },
+                          onAcknowledgeRemoved: (String itemId) {
+                            ref
+                                .read(orderControllerProvider.notifier)
+                                .acknowledgeRemovedItem(order.id, itemId);
+                          },
                         ),
-                      if (segment.isFinal) ...[
-                        const SizedBox(height: AppSpacing.unit),
-                        OrderActionFooter(
-                          status: order.status,
-                          accentColor: accent,
-                          staleLeftover: staleLeftover,
-                          onStart: () => ref
-                              .read(orderControllerProvider.notifier)
-                              .startOrder(order.id),
-                          onComplete: () => ref
-                              .read(orderControllerProvider.notifier)
-                              .completeOrder(order.id),
-                          onRollback: () => ref
-                              .read(orderControllerProvider.notifier)
-                              .rollbackOrder(order.id),
-                          onClear: () => ref
-                              .read(orderControllerProvider.notifier)
-                              .dismissStaleOrder(order.id),
-                        ),
+                        if (segment.showOutgoingContinued)
+                          const ContinuedLabel(
+                            direction: ContinuedLabelDirection.outgoing,
+                          ),
+                        if (segment.isFinal) ...[
+                          const SizedBox(height: AppSpacing.unit),
+                          OrderActionFooter(
+                            status: order.status,
+                            accentColor: accent,
+                            staleLeftover: staleLeftover,
+                            onStart: () => ref
+                                .read(orderControllerProvider.notifier)
+                                .startOrder(order.id),
+                            onComplete: () => ref
+                                .read(orderControllerProvider.notifier)
+                                .completeOrder(order.id),
+                            onRollback: () => ref
+                                .read(orderControllerProvider.notifier)
+                                .rollbackOrder(order.id),
+                            onClear: () => ref
+                                .read(orderControllerProvider.notifier)
+                                .dismissStaleOrder(order.id),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
