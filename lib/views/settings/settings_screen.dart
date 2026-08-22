@@ -16,6 +16,7 @@ import '../../models/server_config.dart';
 import '../../models/urgency_settings.dart';
 import '../../providers/providers.dart';
 import '../../services/announcement_preference_service.dart';
+import '../../services/auto_complete_on_last_item_preference_service.dart';
 import '../../services/order_update_pulse_preference_service.dart';
 import '../../services/product_quantity_list_preference_service.dart';
 import '../kitchen_display/widgets/dark_mode_toggle.dart';
@@ -72,10 +73,7 @@ class SettingsScreen extends ConsumerWidget {
             child: _NotificationsSection(),
           ),
           const SizedBox(height: AppSpacing.gutter),
-          const _SettingsSection(
-            title: 'Server',
-            child: _ServerSection(),
-          ),
+          const _SettingsSection(title: 'Server', child: _ServerSection()),
           const SizedBox(height: AppSpacing.gutter),
           _SettingsSection(
             title: 'Account',
@@ -175,9 +173,7 @@ class SettingsScreen extends ConsumerWidget {
       return;
     }
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(
-        builder: (_) => const LoginScreen(),
-      ),
+      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
       (Route<dynamic> route) => false,
     );
   }
@@ -336,6 +332,9 @@ class _AppearanceSection extends ConsumerWidget {
     final bool productListVisible = ref.watch(
       productQuantityListVisibleProvider,
     );
+    final bool autoCompleteOnLastItem = ref.watch(
+      autoCompleteOnLastItemProvider,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,6 +369,35 @@ class _AppearanceSection extends ConsumerWidget {
                 color: colorScheme.onSurface,
                 fontWeight: FontWeight.w500,
                 fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.gutter),
+        Row(
+          children: [
+            Switch.adaptive(
+              key: const Key('auto-complete-on-last-item-switch'),
+              value: autoCompleteOnLastItem,
+              activeThumbColor: AppColors.statusTabActive,
+              inactiveThumbColor: colorScheme.onSurfaceVariant,
+              inactiveTrackColor: colorScheme.outline,
+              onChanged: (bool value) async {
+                ref.read(autoCompleteOnLastItemProvider.notifier).state = value;
+                final AutoCompleteOnLastItemPreferenceService service = ref
+                    .read(autoCompleteOnLastItemPreferenceServiceProvider);
+                await service.save(value);
+              },
+            ),
+            const SizedBox(width: AppSpacing.unit),
+            Expanded(
+              child: Text(
+                'Complete ticket when last item is struck',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                ),
               ),
             ),
           ],
@@ -533,7 +561,9 @@ class _NotificationsSection extends ConsumerWidget {
         OutlinedButton(
           key: const Key('test-announcement-button'),
           onPressed: () async {
-            await ref.read(kdsTtsServiceProvider).speakNow(testAnnouncementLine);
+            await ref
+                .read(kdsTtsServiceProvider)
+                .speakNow(testAnnouncementLine);
           },
           style: OutlinedButton.styleFrom(
             foregroundColor: colorScheme.onSurface,
@@ -583,14 +613,10 @@ class _OrderTimingSection extends ConsumerWidget {
     );
 
     final int warningMinutes = ref.watch(
-      urgencySettingsProvider.select(
-        (UrgencySettings s) => s.warningMinutes,
-      ),
+      urgencySettingsProvider.select((UrgencySettings s) => s.warningMinutes),
     );
     final int criticalMinutes = ref.watch(
-      urgencySettingsProvider.select(
-        (UrgencySettings s) => s.criticalMinutes,
-      ),
+      urgencySettingsProvider.select((UrgencySettings s) => s.criticalMinutes),
     );
     final Color warningColor = ref.watch(
       urgencySettingsProvider.select((UrgencySettings s) => s.warningColor),

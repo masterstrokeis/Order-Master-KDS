@@ -16,6 +16,7 @@ import '../models/order_item_model.dart';
 import '../models/order_model.dart';
 import '../models/orders_list_result.dart';
 import '../models/sync_result.dart';
+import '../providers/auto_complete_on_last_item_providers.dart';
 import '../providers/kds_backend_providers.dart';
 import '../services/kds_api_service.dart';
 import '../services/kds_http_client.dart';
@@ -34,8 +35,9 @@ class OrderController extends AsyncNotifier<List<Order>> {
   bool isStaleLeftover(String orderId) => _staleOrderIds.contains(orderId);
 
   void _publishStaleIds() {
-    ref.read(staleLeftoverOrderIdsProvider.notifier).state =
-        Set<String>.of(_staleOrderIds);
+    ref.read(staleLeftoverOrderIdsProvider.notifier).state = Set<String>.of(
+      _staleOrderIds,
+    );
   }
 
   KdsApiService get _api => ref.read(kdsApiServiceProvider);
@@ -86,9 +88,7 @@ class OrderController extends AsyncNotifier<List<Order>> {
       for (final Order order in active.orders) order.id: order,
       for (final Order order in completed.orders) order.id: order,
     };
-    return byId.values
-        .map((Order order) => stampCancelledAt(order))
-        .toList();
+    return byId.values.map((Order order) => stampCancelledAt(order)).toList();
   }
 
   Future<void> startOrder(String orderId) async {
@@ -202,6 +202,7 @@ class OrderController extends AsyncNotifier<List<Order>> {
           }).toList(),
         ),
       );
+      await _maybeCompleteWhenAllStruck(orderId);
       return;
     }
 
@@ -216,9 +217,41 @@ class OrderController extends AsyncNotifier<List<Order>> {
       );
       _applyItemPatch(result);
       _lastActionMessage = null;
+      await _maybeCompleteWhenAllStruck(orderId);
     } on KdsApiError catch (error) {
       await _handleMutationError(error);
     }
+  }
+
+  /// Completes a cooking ticket when every active line is struck and
+  /// [autoCompleteOnLastItemProvider] is on. Un-strikes are ignored.
+  Future<void> _maybeCompleteWhenAllStruck(String orderId) async {
+    if (!ref.read(autoCompleteOnLastItemProvider)) {
+      return;
+    }
+    if (isStaleLeftover(orderId)) {
+      return;
+    }
+    final List<Order>? orders = state.value;
+    if (orders == null) {
+      return;
+    }
+    final Order? order = _find(orders, orderId);
+    if (order == null || order.status != OrderStatus.cooking) {
+      return;
+    }
+    if (!_allActiveItemsStruck(order)) {
+      return;
+    }
+    await completeOrder(orderId);
+  }
+
+  bool _allActiveItemsStruck(Order order) {
+    final Iterable<OrderItem> active = order.items.where(
+      (OrderItem item) => !item.isRemoved,
+    );
+    return active.isNotEmpty &&
+        active.every((OrderItem item) => item.isCompleted);
   }
 
   /// One-directional batch complete: starts unstarted tickets, then marks
@@ -325,9 +358,8 @@ class OrderController extends AsyncNotifier<List<Order>> {
         order.copyWith(
           items: order.items
               .map(
-                (OrderItem i) => i.id == itemId
-                    ? i.copyWith(isRemovedUnseen: false)
-                    : i,
+                (OrderItem i) =>
+                    i.id == itemId ? i.copyWith(isRemovedUnseen: false) : i,
               )
               .toList(),
         ),
@@ -494,7 +526,8 @@ class OrderController extends AsyncNotifier<List<Order>> {
             version: result.version,
             updatedAt: result.updatedAt,
             completedAt: result.completedAt,
-            clearCompletedAt: result.completedAt == null &&
+            clearCompletedAt:
+                result.completedAt == null &&
                 result.status != OrderStatus.completed,
           ),
         );
@@ -631,8 +664,9 @@ class OrderController extends AsyncNotifier<List<Order>> {
 }
 
 final AsyncNotifierProvider<OrderController, List<Order>>
-orderControllerProvider =
-    AsyncNotifierProvider<OrderController, List<Order>>(OrderController.new);
+orderControllerProvider = AsyncNotifierProvider<OrderController, List<Order>>(
+  OrderController.new,
+);
 
 /// Broadcast bus for chef-facing order diffs. Lives next to
 /// [orderControllerProvider] so the notifier can emit without importing

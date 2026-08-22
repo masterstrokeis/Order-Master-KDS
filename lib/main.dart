@@ -11,6 +11,7 @@ import 'core/utils/board_ticket_order.dart';
 import 'core/utils/order_title_number.dart';
 import 'providers/providers.dart';
 import 'services/announcement_preference_service.dart';
+import 'services/auto_complete_on_last_item_preference_service.dart';
 import 'services/board_ticket_order_preference_service.dart';
 import 'services/order_title_number_preference_service.dart';
 import 'services/order_update_pulse_preference_service.dart';
@@ -38,14 +39,18 @@ Future<void> main() async {
       AnnouncementPreferenceService();
   final bool initialAnnouncementsEnabled = await announcementService.load();
 
+  final AutoCompleteOnLastItemPreferenceService autoCompleteService =
+      AutoCompleteOnLastItemPreferenceService();
+  final bool initialAutoCompleteOnLastItem = await autoCompleteService.load();
+
   final OrderUpdatePulsePreferenceService pulseService =
       OrderUpdatePulsePreferenceService();
   final int initialPulseSeconds = await pulseService.load();
 
   final CancelledDisplayPreferenceService cancelledDisplayService =
       CancelledDisplayPreferenceService();
-  final int initialCancelledDisplaySeconds =
-      await cancelledDisplayService.load();
+  final int initialCancelledDisplaySeconds = await cancelledDisplayService
+      .load();
 
   final ServerConfigService serverConfigService = ServerConfigService();
   final ServerConfig? initialServer = await serverConfigService.load();
@@ -62,8 +67,8 @@ Future<void> main() async {
 
   final BoardTicketOrderPreferenceService boardTicketOrderService =
       BoardTicketOrderPreferenceService();
-  final BoardTicketOrder initialBoardTicketOrder =
-      await boardTicketOrderService.load();
+  final BoardTicketOrder initialBoardTicketOrder = await boardTicketOrderService
+      .load();
 
   runApp(
     ProviderScope(
@@ -71,6 +76,9 @@ Future<void> main() async {
         themeModeProvider.overrideWith((Ref ref) => initialTheme),
         announcementsEnabledProvider.overrideWith(
           (Ref ref) => initialAnnouncementsEnabled,
+        ),
+        autoCompleteOnLastItemProvider.overrideWith(
+          (Ref ref) => initialAutoCompleteOnLastItem,
         ),
         productQuantityListVisibleProvider.overrideWith(
           (Ref ref) => initialProductQuantityListVisible,

@@ -41,6 +41,7 @@ export '../controllers/voice_announcement_controller.dart'
         orderUpdatePulseUntilProvider,
         voiceAnnouncementProvider;
 export '../services/cancelled_display_preference_service.dart';
+export 'auto_complete_on_last_item_providers.dart';
 export 'board_ticket_order_providers.dart';
 export 'kds_backend_providers.dart';
 export 'order_title_number_providers.dart';
@@ -164,45 +165,43 @@ final Provider<TabCounts> tabCountsProvider = Provider<TabCounts>((Ref ref) {
   );
 });
 
-final Provider<List<ItemQuantitySection>> itemQuantitiesProvider =
-    Provider<List<ItemQuantitySection>>((Ref ref) {
-      final String? stationId = ref.watch(selectedStationProvider);
-      final List<Order> orders =
-          ref.watch(orderControllerProvider).value ?? <Order>[];
-      final List<Product> products = ref.watch(productsProvider);
-      final List<ProductCategory> categories = ref.watch(
-        productCategoriesProvider,
-      );
-      final OrderTitleNumberSource titleNumberSource = ref.watch(
-        orderTitleNumberSourceProvider,
-      );
-      final Set<String> staleOrderIds = ref.watch(staleLeftoverOrderIdsProvider);
+final Provider<List<ItemQuantitySection>>
+itemQuantitiesProvider = Provider<List<ItemQuantitySection>>((Ref ref) {
+  final String? stationId = ref.watch(selectedStationProvider);
+  final List<Order> orders =
+      ref.watch(orderControllerProvider).value ?? <Order>[];
+  final List<Product> products = ref.watch(productsProvider);
+  final List<ProductCategory> categories = ref.watch(productCategoriesProvider);
+  final OrderTitleNumberSource titleNumberSource = ref.watch(
+    orderTitleNumberSourceProvider,
+  );
+  final Set<String> staleOrderIds = ref.watch(staleLeftoverOrderIdsProvider);
 
-      return buildItemQuantitySections(
-        orders: orders,
-        stationId: stationId,
-        products: products,
-        categories: categories,
-        titleNumber: (Order order) =>
-            orderTitleNumber(order, titleNumberSource),
-        isStaleLeftover: staleOrderIds.contains,
-      );
-    });
+  return buildItemQuantitySections(
+    orders: orders,
+    stationId: stationId,
+    products: products,
+    categories: categories,
+    titleNumber: (Order order) => orderTitleNumber(order, titleNumberSource),
+    isStaleLeftover: staleOrderIds.contains,
+  );
+});
 
-final itemPrepBreakdownProvider = Provider.family<List<PrepLine>, ItemGroupKey>((
-  Ref ref,
-  ItemGroupKey key,
-) {
-  final List<ItemQuantitySection> sections = ref.watch(itemQuantitiesProvider);
-  for (final ItemQuantitySection section in sections) {
-    for (final ItemQuantityEntry entry in section.entries) {
-      if (entry.key == key) {
-        return entry.contributors;
+final itemPrepBreakdownProvider = Provider.family<List<PrepLine>, ItemGroupKey>(
+  (Ref ref, ItemGroupKey key) {
+    final List<ItemQuantitySection> sections = ref.watch(
+      itemQuantitiesProvider,
+    );
+    for (final ItemQuantitySection section in sections) {
+      for (final ItemQuantityEntry entry in section.entries) {
+        if (entry.key == key) {
+          return entry.contributors;
+        }
       }
     }
-  }
-  return const <PrepLine>[];
-});
+    return const <PrepLine>[];
+  },
+);
 
 final orderByIdProvider = Provider.family<Order?, String>((
   Ref ref,

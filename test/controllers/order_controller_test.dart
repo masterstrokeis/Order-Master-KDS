@@ -13,6 +13,7 @@ import 'package:order_master_kds/models/order_item_model.dart';
 import 'package:order_master_kds/models/order_model.dart';
 import 'package:order_master_kds/models/restaurant_model.dart';
 import 'package:order_master_kds/models/staff_model.dart';
+import 'package:order_master_kds/providers/auto_complete_on_last_item_providers.dart';
 import 'package:order_master_kds/providers/providers.dart';
 import 'package:order_master_kds/services/kds_api_service.dart';
 import 'package:order_master_kds/services/kds_http_client.dart';
@@ -106,7 +107,7 @@ void main() {
     );
   });
 
-  test('marking all items done does not complete the order', () async {
+  test('striking the last item completes the order when the setting is on', () async {
     final ProviderContainer container = ProviderContainer();
     addTearDown(container.dispose);
 
@@ -121,7 +122,44 @@ void main() {
         .firstWhere((Order o) => o.status == OrderStatus.cooking);
 
     for (final OrderItem item in cooking.items) {
-      if (!item.isCompleted) {
+      if (!item.isCompleted && !item.isRemoved) {
+        await controller.toggleItemCompleted(cooking.id, item.id);
+      }
+    }
+
+    final Order updated = container
+        .read(orderControllerProvider)
+        .requireValue
+        .firstWhere((Order o) => o.id == cooking.id);
+    expect(updated.status, OrderStatus.completed);
+    expect(
+      updated.items
+          .where((OrderItem i) => !i.isRemoved)
+          .every((OrderItem i) => i.isCompleted),
+      isTrue,
+    );
+  });
+
+  test('striking every item leaves the order cooking when the setting is off', () async {
+    final ProviderContainer container = ProviderContainer(
+      overrides: [
+        autoCompleteOnLastItemProvider.overrideWith((Ref ref) => false),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(orderControllerProvider.future);
+    final OrderController controller = container.read(
+      orderControllerProvider.notifier,
+    );
+
+    final Order cooking = container
+        .read(orderControllerProvider)
+        .requireValue
+        .firstWhere((Order o) => o.status == OrderStatus.cooking);
+
+    for (final OrderItem item in cooking.items) {
+      if (!item.isCompleted && !item.isRemoved) {
         await controller.toggleItemCompleted(cooking.id, item.id);
       }
     }
@@ -131,7 +169,60 @@ void main() {
         .requireValue
         .firstWhere((Order o) => o.id == cooking.id);
     expect(updated.status, OrderStatus.cooking);
-    expect(updated.items.every((OrderItem i) => i.isCompleted), isTrue);
+    expect(
+      updated.items
+          .where((OrderItem i) => !i.isRemoved)
+          .every((OrderItem i) => i.isCompleted),
+      isTrue,
+    );
+  });
+
+  test('un-striking a completed line does not complete the ticket', () async {
+    final ProviderContainer container = ProviderContainer(
+      overrides: [
+        autoCompleteOnLastItemProvider.overrideWith((Ref ref) => false),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(orderControllerProvider.future);
+    final OrderController controller = container.read(
+      orderControllerProvider.notifier,
+    );
+    final Order cooking = container
+        .read(orderControllerProvider)
+        .requireValue
+        .firstWhere(
+          (Order o) =>
+              o.status == OrderStatus.cooking &&
+              o.items.any((OrderItem i) => !i.isCompleted && !i.isRemoved),
+        );
+    final OrderItem target = cooking.items.firstWhere(
+      (OrderItem i) => !i.isCompleted && !i.isRemoved,
+    );
+
+    await controller.toggleItemCompleted(cooking.id, target.id);
+    expect(
+      container
+          .read(orderControllerProvider)
+          .requireValue
+          .firstWhere((Order o) => o.id == cooking.id)
+          .status,
+      OrderStatus.cooking,
+    );
+
+    await controller.toggleItemCompleted(cooking.id, target.id);
+    final Order afterUnstrike = container
+        .read(orderControllerProvider)
+        .requireValue
+        .firstWhere((Order o) => o.id == cooking.id);
+    expect(afterUnstrike.status, OrderStatus.cooking);
+    expect(
+      afterUnstrike.items
+          .firstWhere((OrderItem i) => i.id == target.id)
+          .isCompleted,
+      isFalse,
+    );
   });
 
   test('rollbackOrder moves completed to cooking and preserves items', () async {
@@ -714,6 +805,14 @@ void main() {
             .items
             .every((OrderItem item) => item.isCompleted || item.isRemoved),
         isTrue,
+      );
+      expect(
+        container
+            .read(orderControllerProvider)
+            .requireValue
+            .firstWhere((Order o) => o.id == cooking.id)
+            .status,
+        OrderStatus.completed,
       );
     });
 
